@@ -28,7 +28,7 @@ az group show --name <resource_group>
 az group create --name <resource_group> --location <location>
 
 az containerapp env show --name <environment> --resource-group <resource_group>
-az containerapp env create --name <environment> --resource-group <resource_group> --location <location> --enable-workload-profiles
+az containerapp env create --name <environment> --resource-group <resource_group> --location <location> --enable-workload-profiles --logs-destination none
 
 az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv
 az containerapp env workload-profile add --name <environment> --resource-group <resource_group> --workload-profile-name gpu-t4 --workload-profile-type Consumption-GPU-NC8as-T4
@@ -72,7 +72,7 @@ az containerapp create --name vot-<preset> --resource-group <resource_group> --y
       workloadProfileName: $wp,
       configuration: {
         activeRevisionsMode: "Single",
-        ingress: {external: true, targetPort: 8000, transport: "auto",
+        ingress: {external: true, targetPort: 8000, transport: "auto", allowInsecure: false,
           ipSecurityRestrictions: [{name: "caller", ipAddressRange: $ip, action: "Allow"}]},
         secrets: ([{name: "vllm-api-key", value: env[$keyvar]}]
           + (if $hf then [{name: "hf-token", value: env.HF_TOKEN}] else [] end))
@@ -117,6 +117,8 @@ everything and is the user's call, never a destroy's.
 
 ## Traps
 
+- The create spec must carry `ingress.allowInsecure: false`: without it `az containerapp create --yaml` fails with `400 ... could not be converted to System.Boolean. Path: $` (verified with containerapp 1.2.0b5 to 1.3.0b5).
+- `--logs-destination none` keeps the environment from creating a billed Log Analytics workspace; `az containerapp logs show` streams console and system logs without it.
 - GPU workload profiles get no default health probes, so a long model load is not restarted.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
 - The platform driver sets the CUDA ceiling (driver 570 -> CUDA 12.x, 580 -> 13.x): an image built for a newer CUDA fails at start - check the log's CUDA error first.
