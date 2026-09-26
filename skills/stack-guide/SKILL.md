@@ -36,8 +36,9 @@ https://docs.astral.sh/uv/getting-started/installation/ (on the user's yes).
 Placeholders used in the references: `<preset>` (the preset name),
 `<model>`, `<served name>`, `<vllm args>` (the merged `vllm_args` rendered
 as `--flag value`, `true` as `--flag`, `false` omitted), `<port>` and the
-other `config` fields by their key. `[...]` marks a part included only
-when its condition applies, without the brackets.
+other `config` fields by their key, plus the placeholders a reference
+defines itself (`azure`: `<environment>`, `<storage>`). `[...]` marks a
+part included only when its condition applies, without the brackets.
 
 Tracing (every type): when the environment has `otlp_endpoint`, add
 `--otlp-traces-endpoint <otlp_endpoint>` to `<vllm args>` and set
