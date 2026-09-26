@@ -1,3 +1,22 @@
+## [0.2.0] - 2026-09-26
+
+### 🚀 Features
+
+- *(aca)* Cache models on an azure files storage and generate the api key at serve time (#19)
+- Rename the aca stack to azure and list the planned kubernetes, aws and gcp stacks (#23)
+
+### 🐛 Bug Fixes
+
+- *(publish)* Create the version tag with --no-sign (#17)
+
+### 📚 Documentation
+
+- Align the plugin description and simplify the readme (#25)
+
+### ⚙️ Miscellaneous Tasks
+
+- *(deps)* Bump astral-sh/setup-uv from 10.1.0 to 10.2.0 (#11)
+- *(deps)* Bump orhun/git-cliff-action from 4.9.0 to 4.9.1 (#12)
 ## [0.1.0] - 2026-09-26
 
 ### 🚀 Features
