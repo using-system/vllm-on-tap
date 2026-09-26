@@ -1,0 +1,276 @@
+name: release
+run-name: "release: ${{ github.ref_name }}"
+
+on:
+  # One trigger, one act: pushing a version tag IS the release order.
+  #   git tag v0.2.0 && git push origin v0.2.0
+  # The workflow then: computes the bump for exactly that version, opens
+  # the release PR with the oddyssey-release App (so pull_request CI runs
+  # on it), waits for those checks, squash-merges it, re-points the tag at
+  # the merge commit, and creates the GitHub release. Every step skips
+  # work already done, so re-running the tag's workflow run backfills
+  # safely - but after a FAILED run, fix main and use "Re-run all jobs": a
+  # partial re-run would reuse a stale prepare artifact against a moved
+  # main. Notes: the tag's original target is decorative (the release
+  # always bumps current main; the re-point puts the tag on the merge
+  # commit - a lightweight tag, consumers who fetched it pre-move need
+  # fetch --force), and any future v* tag ruleset must exempt the ambient
+  # GITHUB_TOKEN's force-push below or the pipeline breaks itself.
+  # Accepted trade-off (maintainer, 2026-09-26): the release PR is
+  # auto-merged once CI passes, with no human review of its generated
+  # diff - main updates unreviewed on every tagged release. The residual
+  # risk is bounded by what CI on the release PR would catch, since
+  # prepare's own steps (a version bump via jq, the SHA-pinned
+  # git-cliff-action) run no unpinned third-party code.
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# One release at a time - a second tag push queues behind the first.
+concurrency:
+  group: release
+
+jobs:
+  prepare:
+    # Computes the bumped tree for the tag's version. This job runs no
+    # unpinned third-party code (git-cliff-action is SHA-pinned, the jq
+    # edit is inert) - so it references NO secret regardless: the App key
+    # and token live only in release below, which is the only job that
+    # needs to authenticate as anything. The bumped files leave as an
+    # artifact.
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      notes_range: ${{ steps.prev.outputs.notes_range }}
+    steps:
+      - name: Derive the version from the tag
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${REF_NAME#v}"
+          # Strict semver gate: VERSION feeds jq, git-cliff args, and step
+          # outputs - reject anything that is not plain X.Y.Z outright
+          # instead of escaping it through.
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag ${REF_NAME} is not a plain vX.Y.Z version tag."
+            exit 1
+          fi
+          {
+            echo "version<<GH_OUT"
+            echo "${VERSION}"
+            echo "GH_OUT"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Locate the previous version tag
+        id: prev
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          # The notes cannot rely on git-cliff's "unreleased" set: the
+          # trigger tag already exists, so that set is empty. Hand the
+          # notes step an explicit range instead - previous version tag to
+          # the trigger tag. The walk is anchored at the trigger tag's own
+          # ancestry (not main's HEAD), so a backfill of an old tag still
+          # finds ITS previous version, and only strict vX.Y.Z tags
+          # qualify. First release: from the root commit instead.
+          PREV="$(git describe --tags --abbrev=0 --match "v*" --exclude "${REF_NAME}" "${REF_NAME}^{commit}" 2>/dev/null || echo '')"
+          echo "$PREV" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || PREV=''
+          if [ -n "$PREV" ]; then
+            RANGE="${PREV}..${REF_NAME}"
+          else
+            RANGE="$(git rev-list --max-parents=0 "${REF_NAME}" | tail -1)..${REF_NAME}"
+          fi
+          {
+            echo "notes_range<<GH_OUT"
+            echo "${RANGE}"
+            echo "GH_OUT"
+          } >> "$GITHUB_OUTPUT"
+      - name: Regenerate the changelog for the tagged version
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          args: --tag v${{ steps.version.outputs.version }} -o CHANGELOG.md
+      - name: Bump the version in plugin.json
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          jq --arg v "$VERSION" '.version = $v' plugin.json > plugin.json.tmp
+          mv plugin.json.tmp plugin.json
+      - name: Hand the bumped tree to the release job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bumped-tree
+          include-hidden-files: true
+          path: |
+            plugin.json
+            CHANGELOG.md
+
+  release:
+    # The only job that holds the App key/token, and it runs no project
+    # or unpinned third-party code - just SHA-pinned actions and gh over
+    # the artifact prepare produced. Opens the release PR, waits for its
+    # CI, merges it, re-points the tag at the merge commit, and creates
+    # the GitHub release.
+    runs-on: ubuntu-26.04
+    needs: prepare
+    timeout-minutes: 30
+    # contents: write exists for one purpose: the tag re-point below is
+    # pushed with the ambient GITHUB_TOKEN, whose pushes never trigger
+    # workflows - an App-token push would re-trigger this very workflow.
+    # The job runs only SHA-pinned actions, no project code.
+    permissions:
+      contents: write
+    outputs:
+      build_oid: ${{ steps.finalize.outputs.build_oid }}
+    steps:
+      - name: Mint the release App token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # Writes below authenticate explicitly with the App token;
+          # nothing write-capable stays in .git/config.
+          persist-credentials: false
+      - name: Overlay the bumped tree
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bumped-tree
+      - name: Generate the release notes
+        id: notes
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          # Explicit range, not --unreleased: the trigger tag already
+          # exists, which makes the unreleased set empty.
+          args: --tag v${{ needs.prepare.outputs.version }} --strip all ${{ needs.prepare.outputs.notes_range }} -o /tmp/release-notes.md
+      - name: Open or update the release PR
+        id: pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          # The App token, not GITHUB_TOKEN: PRs opened by GITHUB_TOKEN
+          # never trigger pull_request workflows, so the release PR
+          # would be the one diff CI never validates.
+          token: ${{ steps.app.outputs.token }}
+          branch: release/pending
+          delete-branch: true
+          commit-message: "chore(release): ${{ needs.prepare.outputs.version }}"
+          title: "chore(release): ${{ needs.prepare.outputs.version }}"
+          body: ${{ steps.notes.outputs.content }}
+          add-paths: |
+            plugin.json
+            CHANGELOG.md
+      - name: Wait for the release PR's CI, then merge it
+        id: merge
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+          HEAD_SHA: ${{ steps.pr.outputs.pull-request-head-sha }}
+        run: |
+          if [ -z "$NUMBER" ]; then
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "No release PR opened - the tree already carries this version (re-run/backfill); nothing to merge."
+            exit 0
+          fi
+          # The merge target is the PR this very run just opened -
+          # selected by number, never by listing or title
+          # (GHSA-hmfh-fqx9-f56q: title-based selection is what let a
+          # foreign PR be released).
+          echo "Waiting for CI on release PR #${NUMBER}..."
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            COUNT="$(gh pr checks -R "${GITHUB_REPOSITORY}" "$NUMBER" 2>/dev/null | wc -l | tr -d ' ')"
+            [ "$COUNT" -gt 0 ] && break
+            sleep 10
+          done
+          # A release PR with no checks at all would mean CI is broken
+          # or not triggering (a GITHUB_TOKEN regression) - refuse to
+          # merge unvalidated code.
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::no CI checks appeared on release PR #${NUMBER} - refusing to merge an unvalidated release."
+            exit 1
+          fi
+          gh pr checks -R "${GITHUB_REPOSITORY}" "$NUMBER" --watch --fail-fast
+          # --match-head-commit pins the merge to the head the checks
+          # ran on: a commit slipped onto release/pending between the
+          # watch and the merge fails closed instead of shipping
+          # unwatched.
+          gh pr merge -R "${GITHUB_REPOSITORY}" "$NUMBER" --squash --match-head-commit "$HEAD_SHA"
+          # The merge-commit field can lag the merge by a moment.
+          MERGE_OID=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            MERGE_OID="$(gh pr view -R "${GITHUB_REPOSITORY}" "$NUMBER" --json mergeCommit --jq '.mergeCommit.oid // empty')"
+            [ -n "$MERGE_OID" ] && break
+            sleep 3
+          done
+          if [ -z "$MERGE_OID" ]; then
+            echo "::error::release PR #${NUMBER} reports no merge commit - refusing to tag blind."
+            exit 1
+          fi
+          {
+            echo "merged=true"
+            echo "merge_oid<<GH_OUT"
+            echo "${MERGE_OID}"
+            echo "GH_OUT"
+          } >> "$GITHUB_OUTPUT"
+      - name: Point the tag at the release commit
+        id: finalize
+        env:
+          MERGED: ${{ steps.merge.outputs.merged }}
+          MERGE_OID: ${{ steps.merge.outputs.merge_oid }}
+          GH_AMBIENT_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          git fetch origin main "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}" --force
+          if [ "$MERGED" = "true" ]; then
+            if ! git merge-base --is-ancestor "$MERGE_OID" origin/main; then
+              echo "::error::main does not carry merge commit ${MERGE_OID} - refusing to move the tag."
+              exit 1
+            fi
+            # The pushed tag pointed at a pre-bump commit; the release
+            # is the merge commit. Re-pointing is internal to this run,
+            # leaves the tag on the exact released tree, and is pushed
+            # with the ambient GITHUB_TOKEN on purpose: its pushes
+            # never trigger workflows, so this cannot re-fire the tag
+            # trigger above.
+            git tag -f "${REF_NAME}" "${MERGE_OID}"
+            git push --force "https://x-access-token:${GH_AMBIENT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${REF_NAME}"
+            BUILD_OID="${MERGE_OID}"
+          else
+            # Re-run/backfill: the tag must already point at the
+            # released commit - verify instead of assuming. A run that
+            # died between merge and re-point leaves the tag on the
+            # pre-bump commit while main already carries the version;
+            # trusting it would silently build the previous release.
+            BUILD_OID="$(git rev-parse "refs/tags/${REF_NAME}^{commit}")"
+            TAG_VERSION="$(git show "${BUILD_OID}:plugin.json" | jq -r .version)"
+            if [ "v${TAG_VERSION}" != "${REF_NAME}" ]; then
+              echo "::error::tag ${REF_NAME} points at a tree carrying version ${TAG_VERSION} - a previous run likely merged but died before re-pointing the tag. Recover with: git tag -f ${REF_NAME} <merge-oid> && git push --force origin ${REF_NAME}, then re-run this workflow."
+              exit 1
+            fi
+          fi
+          {
+            echo "build_oid<<GH_OUT"
+            echo "${BUILD_OID}"
+            echo "GH_OUT"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish the GitHub release (if not already published)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ github.ref_name }}
+          NOTES: ${{ steps.notes.outputs.content }}
+        run: |
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "${TAG} release already exists - leaving it in place."
+          else
+            gh release create "${TAG}" --title "${TAG}" --notes "${NOTES}"
+          fi

@@ -1,0 +1,4 @@
+name: bad-preset
+model: google/gemma-4-12B-it-qat-w4a16-ct
+vllm_arg:
+  --max-model-len: 16384

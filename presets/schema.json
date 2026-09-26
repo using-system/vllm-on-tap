@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/using-system/vllm-on-tap/main/presets/schema.json",
+  "title": "vllm-on-tap preset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "model"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "description": {"type": "string"},
+    "model": {"type": "string", "minLength": 1},
+    "served_model_name": {"type": "string", "minLength": 1},
+    "gpu_memory_gb": {"type": "number", "exclusiveMinimum": 0},
+    "vllm_args": {"$ref": "#/$defs/vllm_args"},
+    "env": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$"}},
+    "stacks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local-vllm": {"$ref": "#/$defs/override"},
+        "local-vllm-metal": {"$ref": "#/$defs/override"},
+        "local-vllm-docker": {"$ref": "#/$defs/override"},
+        "aca": {"$ref": "#/$defs/override"}
+      }
+    }
+  },
+  "$defs": {
+    "vllm_args": {
+      "type": "object",
+      "propertyNames": {"pattern": "^--[a-z0-9][a-z0-9-]*$"},
+      "additionalProperties": {"type": ["string", "number", "boolean"]}
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "vllm_args": {"$ref": "#/$defs/vllm_args"},
+        "gpu_memory_gb": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}
