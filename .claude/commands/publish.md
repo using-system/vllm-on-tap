@@ -24,7 +24,7 @@ Steps:
      `git tag -l 'v*' --sort=-v:refname | head -1` (no tag at all =
      first release, treat the base as v0.0.0 and say so - the first
      release is `0.1.0`, and the plugin stays in `0.x` until
-     `local-vllm-metal` and `aca` are verified live);
+     `local-vllm-metal` and `azure` are verified live);
    - check the latest tag's release run
      (`gh run list --workflow release.yml --limit 1`): if it FAILED,
      do not offer a new version - guide the recovery instead (fix

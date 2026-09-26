@@ -20,7 +20,8 @@
         "local-vllm": {"$ref": "#/$defs/override"},
         "local-vllm-metal": {"$ref": "#/$defs/override"},
         "local-vllm-docker": {"$ref": "#/$defs/override"},
-        "aca": {"$ref": "#/$defs/override"}
+        "azure": {"$ref": "#/$defs/override"},
+        "aca": {"$ref": "#/$defs/override", "deprecated": true, "description": "Earlier name of azure, read as azure."}
       }
     }
   },

@@ -19,7 +19,7 @@ body:
     attributes:
       label: Stack
       options:
-        - aca
+        - azure
         - local-vllm-metal
         - local-vllm
         - local-vllm-docker

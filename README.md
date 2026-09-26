@@ -1,8 +1,9 @@
 # vllm-on-tap
 
 An [Agent Plugins](https://agent-plugins.org) plugin that serves a vLLM
-model preset on demand and tears it down again - locally, on Apple
-Silicon, in Docker, or on Azure Container Apps serverless GPUs. Configure
+model preset on demand and tears it down again - locally (Linux, Apple
+Silicon or Docker) or on Azure Container Apps serverless GPUs, with
+Kubernetes (KServe), AWS (ECS) and GCP (Cloud Run) planned. Configure
 an environment once, then serve and destroy any preset in it from two
 commands. vLLM on tap.
 
@@ -31,17 +32,31 @@ claude --plugin-dir <path to the clone>
 
 ## Stacks
 
-An environment targets one of four stacks:
+An environment targets one stack:
 
 - `local-vllm` - a background `vllm serve` process on this machine.
 - `local-vllm-metal` - the same, through vLLM's Apple Silicon (MLX) build.
 - `local-vllm-docker` - a `vllm/vllm-openai` container on this machine.
-- `aca` - an Azure Container App with a serverless GPU workload profile.
+- `azure` - an Azure Container Apps environment in which each serve
+  provisions a Container App with a serverless GPU, on demand, and each
+  destroy removes it. An optional storage account caches the Hugging Face
+  model weights and vLLM's compiled graphs, so a preset's later serves
+  start faster.
 
-`local-vllm-metal` (vllm-metal 0.30.0) and `aca` (serverless A100) are
-verified live: configure, serve, a chat request answered, destroy. The
-others are not yet. `local-vllm` and
-`local-vllm-docker` also need a Linux machine with an NVIDIA GPU.
+Planned, not supported in this version yet:
+
+- `kubernetes` - vLLM served through KServe on a cluster with GPU nodes,
+  on premises or in the cloud (AKS, EKS, GKE...), through a `kubectl`
+  already configured for it.
+- `aws` - an Amazon ECS service on GPU instances, with EFS as the cache.
+- `gcp` - a Google Cloud Run service with a GPU, with a Cloud Storage
+  volume as the cache.
+
+`local-vllm-metal` (vllm-metal 0.30.0) and `azure` (serverless A100) are
+verified live: configure, serve, a chat request answered, destroy.
+`local-vllm` and `local-vllm-docker` are not yet; they also need a Linux
+machine with an NVIDIA GPU. An environment configured with `aca`, the
+earlier name of `azure`, keeps working.
 
 ## Presets
 
@@ -59,7 +74,7 @@ there.
 
 ## Cost and exposure
 
-On `aca`, the Container App bills for as long as it exists - there is no
+On `azure`, the Container App bills for as long as it exists - there is no
 scale-to-zero, so `/vot-destroy` is how the billing stops. Its ingress is
 public but restricted to the serving machine's public IP, and requests
 must carry an API key that `/vot-serve` generates and stores as the app's
