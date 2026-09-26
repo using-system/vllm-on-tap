@@ -45,8 +45,9 @@ None of the four stacks is verified live yet. `local-vllm` and
 ## Presets
 
 A preset names a model and its `vllm serve` flags, not where it runs. The
-builtin preset is `gemma4-12b-qat` (Gemma 4 12B, Google's QAT 4-bit
-weights). Add your own under `.vot/presets/<name>.yaml`, validated against
+builtin presets are `gemma4-12b-qat` (Gemma 4 12B, NVIDIA stacks only),
+`gemma4-e4b-qat` and `gemma4-e2b-qat` (Gemma 4 E4B / E2B, every stack), all
+on Google's QAT 4-bit weights. Add your own under `.vot/presets/<name>.yaml`, validated against
 [`presets/schema.json`](presets/schema.json); a custom preset of the same
 name shadows the builtin one.
 
