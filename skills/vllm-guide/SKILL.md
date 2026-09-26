@@ -16,7 +16,7 @@ Documentation root: https://docs.vllm.ai/en/latest/
 - `--served-model-name <name>` - the name clients send as `model`.
 - `--max-model-len <tokens>` - context length; lower it when the KV cache does not fit.
 - `--gpu-memory-utilization <0..1>` - share of GPU memory vLLM takes (default 0.9).
-- `--dtype float16|bfloat16|auto` - T4 (compute capability 7.5) has no bf16: vLLM falls back to fp16 there.
+- `--dtype float16|bfloat16|auto` - `auto` follows the checkpoint; a GPU without bf16 falls back to fp16.
 - `--tensor-parallel-size <n>` - split over n GPUs; ACA serverless has one GPU per replica, so 1.
 - `--quantization <method>` - usually inferred from the checkpoint (compressed-tensors w4a16 needs compute capability >= 7.5).
 - Reference: https://docs.vllm.ai/en/latest/cli/serve.html

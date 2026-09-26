@@ -11,7 +11,7 @@
 ## Config fields
 
 - `subscription` - name as `az account list --query "[].name" -o tsv` prints it.
-- `location` - a region with serverless GPUs; T4 and A100: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`; T4 only: `centralindia`, `francecentral`, `japaneast`, `northcentralus`, `southcentralus`, `southeastasia`, `southindia`, `westeurope`, `westus2`.
+- `location` - a region with serverless A100 GPUs: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`.
 - `resource_group` - default `rg-vot`.
 - `environment` - the Container Apps environment; default `vot-env`.
 - `api_key_env` - the name of the shell variable holding the API key; default `VOT_API_KEY`.
@@ -31,13 +31,11 @@ az containerapp env show --name <environment> --resource-group <resource_group>
 az containerapp env create --name <environment> --resource-group <resource_group> --location <location> --enable-workload-profiles --logs-destination none
 
 az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv
-az containerapp env workload-profile add --name <environment> --resource-group <resource_group> --workload-profile-name gpu-t4 --workload-profile-type Consumption-GPU-NC8as-T4
 az containerapp env workload-profile add --name <environment> --resource-group <resource_group> --workload-profile-name gpu-a100 --workload-profile-type Consumption-GPU-NC24-A100
 ```
 
 A profile `add` refused for quota: tell the user to request "Managed
-Environment Consumption T4 GPUs" / "Managed Environment Consumption NCA100
-GPUs" on the environment's Quota page
+Environment Consumption NCA100 GPUs" on the environment's Quota page
 (https://learn.microsoft.com/azure/container-apps/quota-requests), and save
 the environment anyway.
 
@@ -46,7 +44,7 @@ the environment anyway.
 Checks, in this order, stopping at the first refusal:
 
 1. `printenv <api_key_env>` prints nothing (unset, or set but not exported) -> refuse before any Azure call, naming the variable: export it in the shell the agent session is started from, then restart the session; never paste the key into the conversation or a command; generate one with `openssl rand -hex 32` run by the user in that shell. The same holds for `HF_TOKEN` when the preset lists it.
-2. Profile from `gpu_memory_gb`: <= 16 -> `gpu-t4` (cpu `8`, memory `56Gi`); <= 80 -> `gpu-a100` (cpu `24`, memory `220Gi`); > 80 -> refuse (no serverless profile fits).
+2. Profile: always `gpu-a100` (cpu `24`, memory `220Gi`, one A100 80 GB); a preset with `gpu_memory_gb` > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
 

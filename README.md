@@ -38,8 +38,9 @@ An environment targets one of four stacks:
 - `local-vllm-docker` - a `vllm/vllm-openai` container on this machine.
 - `aca` - an Azure Container App with a serverless GPU workload profile.
 
-`local-vllm-metal` is verified live (vllm-metal 0.30.0, `gemma4-e4b-qat`,
-config, serve, traces and destroy). The others are not yet. `local-vllm` and
+`local-vllm-metal` (vllm-metal 0.30.0, `gemma4-e4b-qat`: config, serve,
+traces, destroy) and `aca` (serverless A100, `gemma4-12b-qat`: config,
+serve, API key, destroy) are verified live. The others are not yet. `local-vllm` and
 `local-vllm-docker` also need a Linux machine with an NVIDIA GPU.
 
 ## Presets
