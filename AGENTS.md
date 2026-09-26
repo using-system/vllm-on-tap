@@ -3,7 +3,7 @@
 ## Working conventions
 
 Never commit on the default branch: branch first, named
-`type/short-description` (`fix/aca-readiness`, `docs/presets-guide`).
+`type/short-description` (`fix/azure-readiness`, `docs/presets-guide`).
 Commit messages, PR titles and issue titles all follow
 [Conventional Commits](https://www.conventionalcommits.org/) —
 `type(scope): lowercase imperative description`. The PR title becomes the
@@ -102,9 +102,9 @@ maintainer asks for it — never on an agent's own initiative.
 ## Title and label every issue
 
 Issue titles follow Conventional Commits, like commit messages and PR
-titles (`feat(aca): ...`, `fix(stack-guide): ...`, `docs(readme): ...`).
+titles (`feat(azure): ...`, `fix(stack-guide): ...`, `docs(readme): ...`).
 Every issue gets a type label (`bug`, `enhancement`, `documentation`);
-add the stack's label when it concerns one stack (`aca`,
+add the stack's label when it concerns one stack (`azure`,
 `local-vllm-metal`, ... — create it when missing). When closing an issue
 as not planned, add the `wontfix` label and close with a comment stating
 why.

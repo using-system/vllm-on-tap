@@ -15,7 +15,7 @@ You can expect an acknowledgement within a few days. Relevant scope:
 - the skills a coding agent executes on the user's machine and cloud
   account (a command that could leak a secret, run something unintended,
   or leave a billed resource behind);
-- the exposure of a served model on `aca` (the API key and the ingress
+- the exposure of a served model on `azure` (the API key and the ingress
   restriction to the caller's IP);
 - the release pipeline (the GitHub App token and the release workflow).
 

@@ -1,4 +1,9 @@
-# aca (Azure Container Apps, serverless GPU)
+# azure (Azure Container Apps, serverless GPU)
+
+A Container Apps environment in which each serve provisions a Container
+App with a serverless GPU, on demand, and removes it on destroy; an
+optional storage account caches the model weights and vLLM's compiled
+graphs across serves.
 
 ## Prerequisites and install
 
