@@ -17,9 +17,9 @@
 - `plugin.json` `$schema` is exactly `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`; `version` starts at `0.1.0`; `license` is `MIT`.
 - Stack types are exactly `local-vllm`, `local-vllm-metal`, `local-vllm-docker`, `aca`.
 - A served preset is one unit named `vot-<preset>`.
-- Local stacks bind `127.0.0.1` only; `aca` always requires an API key.
+- Local stacks bind `127.0.0.1` only; `aca` always requires an API key and restricts its ingress to the caller's public IP (the key does not cover every vLLM route).
 - Traces only: `--otlp-traces-endpoint`; no collector, no metrics export.
-- No ACR, no weight cache, one fixed replica on ACA (`--min-replicas 1 --max-replicas 1`).
+- No ACR, no weight cache, one fixed replica on ACA (`minReplicas: 1`, `maxReplicas: 1`).
 - Pinned image: `vllm/vllm-openai:v0.30.0`.
 - Every GitHub Action is pinned by full commit SHA with its version in a comment.
 - Never commit on `main`; branch `type/short-description`; Conventional Commits titles; no `!` / `BREAKING CHANGE`.
@@ -29,7 +29,7 @@
 
 1. A custom preset in `.vot/presets/` with a typo (`vllm_arg:` instead of `vllm_args:`) — expected: `load-preset` refuses it with the schema error, the serve does not start. Pinned by the schema's `additionalProperties: false` and its test in Task 2.
 2. `/vot-serve` of a preset already served (`vot-<preset>` exists) — expected: the user is asked to destroy first or stop, never a second unit or a silent overwrite. Pinned in `vot-serve` step 4 (Task 6) and each reference's *Serve* "already exists" check (Tasks 4–5).
-3. `aca` serve with `VOT_API_KEY` unset — expected: refused before any Azure call, naming the variable. Pinned in the `aca` reference's *Serve* first line (Task 5) and exercised in Task 9.
+3. `aca` serve with `VOT_API_KEY` unset — expected: refused before any Azure call, naming the variable. Pinned in the `aca` reference's *Serve* check 1 (Task 5), `vot-serve` step 4 running the *Serve* checks in their written order (Task 6), and exercised in Task 9.
 4. A `local-vllm*` serve whose port is taken — expected: refused with the port named, not a vLLM crash buried in a log. Pinned in the local references' *Serve* first check (Task 4) and exercised in Task 8.
 5. A preset whose `gpu_memory_gb` exceeds 80 on `aca` — expected: refused (no ACA serverless profile fits), not a create that never becomes ready. Pinned in the `aca` reference's profile rule (Task 5).
 
@@ -38,18 +38,17 @@
 ### Task 1: Repository skeleton, manifest and the CI check
 
 **Files:**
-- Create: `plugin.json`, `LICENSE`, `.gitignore`, `ci/check_repo.py`, `ci/test_check_repo.py`, `.github/workflows/ci.yml`
+- Create: `plugin.json`, `.gitignore`, `ci/check_repo.py`, `ci/test_check_repo.py`, `.github/workflows/ci.yml` (`LICENSE` and `README.md` already exist on `main`: MIT, created with the repository)
 
 **Interfaces:**
 - Produces: `ci/check_repo.py` with `check_skills(root: Path) -> list[str]` and `check_presets(root: Path) -> list[str]` (each returns error strings, empty when valid) and a `main()` that prints errors and exits 1 when any; CI job `validate` that later tasks' files must pass.
 
-- [ ] **Step 1: Create the GitHub repository and push the spec branch** (approved by the maintainer)
+- [ ] **Step 1: Start from `main`**
+
+The repository exists (`https://github.com/using-system/vllm-on-tap`, `main` = the initial README and MIT LICENSE) and the spec and this plan are on `docs/design-spec`, merged to `main` through its own PR on the maintainer's go. Then:
 
 ```bash
 cd ~/Repos/github/vllm-on-tap
-gh repo create using-system/vllm-on-tap --public --description "Serve vLLM presets on demand - locally, on Apple Silicon, in Docker or on Azure Container Apps serverless GPUs - with their traces over OTLP, and tear them down again." --source . --remote origin
-# Bootstrap: the empty repository's main is the approved spec commit; every later change goes through a PR.
-git push origin docs/design-spec:main
 git fetch origin && git switch -c chore/skeleton origin/main
 ```
 
@@ -69,7 +68,7 @@ git fetch origin && git switch -c chore/skeleton origin/main
 }
 ```
 
-- [ ] **Step 3: Write `LICENSE`** (MIT, `Copyright (c) 2026 using-system`, standard MIT text) **and `.gitignore`**
+- [ ] **Step 3: Write `.gitignore`** (keep the existing `LICENSE` untouched)
 
 ```gitignore
 __pycache__/
@@ -241,7 +240,7 @@ Expected: prints `skills/: no SKILL.md found`, exit 1 — correct until Task 3 a
 - [ ] **Step 10: Commit**
 
 ```bash
-git add plugin.json LICENSE .gitignore ci .github/workflows/ci.yml
+git add plugin.json .gitignore ci .github/workflows/ci.yml
 git commit -m "chore(repo): plugin manifest, license and ci checks"
 ```
 
@@ -456,6 +455,10 @@ Documentation root: https://docs.vllm.ai/en/latest/
 - `--otlp-traces-endpoint <url>` - vLLM exports one span per request over OTLP.
 - Protocol: gRPC by default; set `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf`
   when the endpoint is OTLP/HTTP (port 4318, or a URL ending in `/v1/traces`).
+- OTLP/HTTP: vLLM hands the flag's value to the exporter verbatim, with no
+  path appended - the value must be the full URL ending in `/v1/traces`
+  (`http://host:4318` alone posts to `/` and the traces are lost). gRPC
+  takes `host:port` or `http(s)://host:port` with no path.
 - `OTEL_SERVICE_NAME=vot-<preset>` names the service the spans belong to.
 - Metrics have no OTLP export (Prometheus `/metrics` only); vllm-on-tap exports traces only.
 - The OpenTelemetry packages are part of vLLM's base requirements; an install
@@ -464,9 +467,14 @@ Documentation root: https://docs.vllm.ai/en/latest/
 
 ## API key
 
-- vLLM requires `Authorization: Bearer <key>` on every request when
-  `VLLM_API_KEY` is set in its environment (or `--api-key <key>` is passed);
-  prefer the environment variable so the key never appears in a command line.
+- When `VLLM_API_KEY` is set in its environment (or `--api-key <key>` is
+  passed), vLLM requires `Authorization: Bearer <key>` on the `/v1`, `/v2`,
+  `/inference` and `/cohere` routes only. Other routes - `/invocations`
+  (full inference), `/tokenize`, `/pause`, `/abort_requests`,
+  `/update_weights` - stay open (vLLM docs, "API Key Authentication
+  Limitations"): a public endpoint also needs a network restriction.
+- Prefer the environment variable so the key never appears in a command line.
+- Reference: https://docs.vllm.ai/en/latest/usage/security.html
 
 ## OpenAI API
 
@@ -530,7 +538,7 @@ Every reference has these sections, in this order:
   them, and each one's official install command (run only on the user's yes).
 - **Config fields** - the `config` keys of an environment of this type, with defaults.
 - **Prepare** - what `/vot-config` creates once (only `aca` has one).
-- **Serve** - the checks, then the exact command that starts unit `vot-<preset>`.
+- **Serve** - numbered checks, run in their written order and stopping at the first refusal (the "already served" one leads to the destroy-or-stop question), then the exact command that starts unit `vot-<preset>`.
 - **Ready when** - the readiness check and its time bound.
 - **Destroy** - the exact command that removes unit `vot-<preset>`.
 - **Traps** - one line each.
@@ -542,8 +550,11 @@ other `config` fields by their key.
 
 Tracing (every type): when the environment has `otlp_endpoint`, add
 `--otlp-traces-endpoint <otlp_endpoint>` to `<vllm args>` and set
-`OTEL_SERVICE_NAME=vot-<preset>` (plus the protocol variable of vllm-guide's
-*Traces over OTLP* for an OTLP/HTTP endpoint) in vLLM's environment.
+`OTEL_SERVICE_NAME=vot-<preset>` in vLLM's environment. For an OTLP/HTTP
+endpoint (port 4318 or a `/v1/traces` path) also set
+`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and pass the full URL
+ending in `/v1/traces`, appending that path when the environment's value
+lacks it (vllm-guide's *Traces over OTLP*).
 
 Preset environment (every type): each name in the preset's `env` must be set
 in the user's shell - refuse naming the missing one - and is passed to vLLM
@@ -617,7 +628,7 @@ No PID file: report that the unit does not exist.
 ## Prerequisites and install
 
 - macOS 15 or later on Apple Silicon: `sw_vers -productVersion` >= 15 and `uname -m` = `arm64`. Not installable here.
-- `vllm --version` succeeds with the vllm-metal plugin. Install: `brew install vllm-project/vllm-metal/vllm-metal`.
+- `vllm --version` succeeds with the vllm-metal plugin. Install: `brew tap vllm-project/vllm-metal https://github.com/vllm-project/vllm-metal && brew install vllm-project/vllm-metal/vllm-metal` (the tap is not a `homebrew-*` repository, so it needs its URL).
 - `curl --version` succeeds.
 
 ## Config fields
@@ -741,8 +752,9 @@ git commit -m "feat(stack-guide): the stack contract and the local references"
 
 - `az version` succeeds. Install: https://learn.microsoft.com/cli/azure/install-azure-cli (macOS: `brew install azure-cli`).
 - `az account show` succeeds - otherwise the user runs `az login`; never run it for them.
-- `az extension add --name containerapp --upgrade` (the containerapp extension).
-- `az provider register --namespace Microsoft.App` (once per subscription).
+- `az extension show --name containerapp` succeeds. Install: `az extension add --name containerapp --upgrade`.
+- `az provider show --namespace Microsoft.App --query registrationState -o tsv` prints `Registered`. Install: `az provider register --namespace Microsoft.App --wait`.
+- `jq --version` succeeds (to build the app spec below). Install: `brew install jq` / the distribution's package.
 
 ## Config fields
 
@@ -779,24 +791,51 @@ the environment anyway.
 
 ## Serve
 
+Checks, in this order, stopping at the first refusal:
+
 1. `<api_key_env>` unset in the shell -> refuse before any Azure call, naming the variable.
-2. Profile from `gpu_memory_gb`: <= 16 -> `gpu-t4` (`--cpu 8 --memory 56Gi`); <= 80 -> `gpu-a100` (`--cpu 24 --memory 220Gi`); > 80 -> refuse (no serverless profile fits). The profile must exist in `az containerapp env workload-profile list`.
-3. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
-4. Create:
+2. Profile from `gpu_memory_gb`: <= 16 -> `gpu-t4` (cpu `8`, memory `56Gi`); <= 80 -> `gpu-a100` (cpu `24`, memory `220Gi`); > 80 -> refuse (no serverless profile fits).
+3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
+4. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
+
+Create. `az containerapp create --args` cannot carry vLLM's `--flags` (az
+parses them as its own), so the app is created from a YAML spec, built with
+`jq` and streamed through process substitution: the secrets' values come
+from the shell and never touch the disk.
 
 ```bash
-az containerapp create --name vot-<preset> --resource-group <resource_group> \
-  --environment <environment> --workload-profile-name <profile> \
-  --image <image> --cpu <cpu> --memory <memory> \
-  --min-replicas 1 --max-replicas 1 \
-  --ingress external --target-port 8000 \
-  --secrets "vllm-api-key=${<api_key_env>}" ["hf-token=${HF_TOKEN}"] \
-  --env-vars VLLM_API_KEY=secretref:vllm-api-key [HF_TOKEN=secretref:hf-token] [OTEL_SERVICE_NAME=vot-<preset>] [OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf] \
-  --args <model> --served-model-name <served name> --port 8000 <vllm args>
+ENV_ID="$(az containerapp env show --name <environment> --resource-group <resource_group> --query id -o tsv)"
+CALLER_IP="$(curl -fsS https://api.ipify.org)"
+ARGS='["<model>","--served-model-name","<served name>","--port","8000", <vllm args as JSON strings>]'
+ENVS='[{"name":"VLLM_API_KEY","secretRef":"vllm-api-key"}]'   # + {"name":"HF_TOKEN","secretRef":"hf-token"}, {"name":"OTEL_SERVICE_NAME","value":"vot-<preset>"}, {"name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","value":"http/protobuf"} when they apply
+SECRETS="$(jq -n --arg k "${<api_key_env>}" '[{name:"vllm-api-key",value:$k}]')"   # + {name:"hf-token",value:$ENV.HF_TOKEN} when the preset lists HF_TOKEN
+az containerapp create --name vot-<preset> --resource-group <resource_group> --yaml <(jq -n \
+  --arg loc "<location>" --arg env "$ENV_ID" --arg wp "<profile>" --arg img "<image>" \
+  --arg ip "$CALLER_IP/32" --argjson cpu <cpu> --arg mem "<memory>" \
+  --argjson args "$ARGS" --argjson envs "$ENVS" --argjson secrets "$SECRETS" '{
+    location: $loc,
+    properties: {
+      environmentId: $env,
+      workloadProfileName: $wp,
+      configuration: {
+        activeRevisionsMode: "Single",
+        ingress: {external: true, targetPort: 8000, transport: "auto",
+          ipSecurityRestrictions: [{name: "caller", ipAddressRange: $ip, action: "Allow"}]},
+        secrets: $secrets
+      },
+      template: {
+        containers: [{name: "vllm", image: $img, args: $args, env: $envs,
+          resources: {cpu: $cpu, memory: $mem}}],
+        scale: {minReplicas: 1, maxReplicas: 1}
+      }
+    }
+  }')
 ```
 
-5. Base URL: `https://$(az containerapp show --name vot-<preset> --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv)`.
-6. Say it: billing runs until `/vot-destroy <preset>`.
+(`jq` emits JSON, which is valid YAML.) Base URL:
+`https://$(az containerapp show --name vot-<preset> --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv)`.
+Say it: billing runs until `/vot-destroy <preset>`, and only this machine's
+public IP can reach the app (`/vot-serve` again from another network).
 
 ## Ready when
 
@@ -820,7 +859,9 @@ everything and is the user's call, never a destroy's.
 - GPU workload profiles get no default health probes, so a long model load is not restarted.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
 - The platform driver sets the CUDA ceiling (driver 570 -> CUDA 12.x, 580 -> 13.x): an image built for a newer CUDA fails at start - check the log's CUDA error first.
-- The `--secrets` values expand from the shell at run time; they never go into a file.
+- The secret values expand from the shell into the process substitution; they never go into a file or a command line.
+- The API key covers `/v1`, `/v2`, `/inference`, `/cohere` only; `/invocations`, `/tokenize`, `/pause`, `/abort_requests`, `/update_weights` are protected by the ingress IP restriction alone - never remove it.
+- The caller's IP changes (another network, a VPN): update the rule with `az containerapp ingress access-restriction set --name vot-<preset> --resource-group <resource_group> --rule-name caller --ip-address <new ip>/32 --action Allow`.
 - An `otlp_endpoint` on `localhost` or a private address is unreachable from the app.
 ````
 
@@ -908,10 +949,12 @@ description: Serve a vLLM preset on the current vllm-on-tap environment - resolv
    environment's stack type.
 3. **Stack.** Read the stack-guide skill's `SKILL.md` and the reference of
    the environment's stack type.
-4. **Existing unit.** Run the reference's *Serve* "already served" check.
-   When `vot-<preset>` exists: ask whether to destroy it first (then run
-   `/vot-destroy <preset>`'s steps) or stop. Never start a second unit.
-5. **Start.** Run the rest of the reference's *Serve*, with tracing per
+4. **Checks.** Run the reference's *Serve* checks in their written order,
+   stopping at the first refusal. At the "already served" check, when
+   `vot-<preset>` exists: ask whether to destroy it first (then run
+   `/vot-destroy <preset>`'s steps and continue) or stop. Never start a
+   second unit.
+5. **Start.** Run the reference's *Serve* start command, with tracing per
    stack-guide when the environment has `otlp_endpoint`.
 6. **Wait.** Run the reference's *Ready when*. On timeout, show the log
    lines it names and leave the unit for the user to inspect or destroy.
@@ -958,13 +1001,14 @@ git commit -m "feat(skills): vot-config, vot-serve and vot-destroy"
 ### Task 7: README, release workflow, changelog config
 
 **Files:**
-- Create: `README.md`, `cliff.toml`, `CHANGELOG.md`, `.github/workflows/release.yml`
+- Create: `cliff.toml`, `CHANGELOG.md`, `.github/workflows/release.yml`
+- Modify: `README.md` (the initial one GitHub created)
 
 **Interfaces:**
 - Consumes: `plugin.json` (Task 1).
 - Produces: the tag-driven release (spec section 11).
 
-- [ ] **Step 1: Write `README.md`** — sections, one short paragraph or list each: *What it does* (serve a vLLM preset on demand, tear it down, traces over OTLP); *Install* (the repository root is an Agent Plugins plugin: install it through a marketplace that lists it, or try it from a clone with `claude --plugin-dir <path to the clone>` on Claude Code); *Use* (`/vot-config`, `/vot-serve gemma4-12b-qat`, `/vot-destroy gemma4-12b-qat`); *Stacks* (the four types, one line each; `local-vllm` and `local-vllm-docker` marked not yet verified live); *Presets* (builtin list, custom in `.vot/presets/<name>.yaml`, the schema link); *Traces* (`otlp_endpoint`, traces only); *Cost warning* (ACA bills while the app exists); *License* (MIT).
+- [ ] **Step 1: Rewrite `README.md`** — sections, one short paragraph or list each: *What it does* (serve a vLLM preset on demand, tear it down, traces over OTLP); *Install* (the repository root is an Agent Plugins plugin: install it through a marketplace that lists it, or try it from a clone with `claude --plugin-dir <path to the clone>` on Claude Code); *Use* (`/vot-config`, `/vot-serve gemma4-12b-qat`, `/vot-destroy gemma4-12b-qat`); *Stacks* (the four types, one line each; `local-vllm` and `local-vllm-docker` marked not yet verified live); *Presets* (builtin list, custom in `.vot/presets/<name>.yaml`, the schema link); *Traces* (`otlp_endpoint`, traces only); *Cost and exposure* (ACA bills while the app exists; its ingress admits the serving machine's public IP only); *License* (MIT).
 
 - [ ] **Step 2: Write `cliff.toml`** — copy oddyssey's `cliff.toml` (`~/Repos/github/oddyssey/cliff.toml`) verbatim: same template, the `@word` backtick preprocessor, the same `commit_parsers` with `^chore\\(release\\)` skipped.
 
@@ -1003,7 +1047,7 @@ git commit -m "chore(release): tag-driven release workflow and readme"
 git push -u origin chore/skeleton
 ```
 
-Open the PR `feat: vllm-on-tap v0.1 plugin - skills, presets, ci and release` against `main` only on the maintainer's go. CI `validate` must be green.
+Before the PR: a fresh reviewer sub-agent (most capable model) reviews the whole branch against `main` with the spec as requirement; findings are fixed and the same reviewer re-checks until it returns none. Then open the PR `feat: vllm-on-tap v0.1 plugin - skills, presets, ci and release` against `main` and merge it, each on the maintainer's go; CI `validate` must be green. Tasks 8-9 need this merge: `load-preset` fetches builtin presets and `presets/schema.json` from `main`.
 
 - [ ] **Step 7: Maintainer actions (not automatable here)** — state them to the maintainer and wait:
   - install the `oddyssey-release` GitHub App on `using-system/vllm-on-tap`;
@@ -1017,6 +1061,7 @@ Open the PR `feat: vllm-on-tap v0.1 plugin - skills, presets, ci and release` ag
 **Files:**
 - Modify: `skills/stack-guide/references/local-vllm-metal.md` (only what the live run corrects), `presets/gemma4-12b-qat.yaml` (only if the MLX model id must change)
 
+- [ ] **Step 0: Branch** from the merged `main`: `git fetch origin && git switch -c fix/live-acceptance origin/main` (Tasks 8-9 commit their corrections here).
 - [ ] **Step 1: In a scratch repository** (`mkdir -p /tmp/vot-lab && cd /tmp/vot-lab && git init`), with Claude Code started as `claude --plugin-dir ~/Repos/github/vllm-on-tap` (the branch checked out), run `/vot-config`: create `mac`, `local-vllm-metal`, port 8000, no OTLP endpoint. Expected: `.vot/environments/mac.yaml`, `.vot/config.yaml` = `current: mac`, `.gitignore` carries both lines.
 - [ ] **Step 2: Review Focus 4** — occupy the port (`python3 -m http.server 8000 &`), run `/vot-serve gemma4-12b-qat`. Expected: refused, port 8000 named. Stop the server.
 - [ ] **Step 3: Run `/vot-serve gemma4-12b-qat`.** Expected: ready within 15 min, the printed `curl` returns a chat completion.
@@ -1041,7 +1086,7 @@ git commit -m "fix(stack-guide): local-vllm-metal verified live"
 - [ ] **Step 2: Review Focus 3** — `unset VOT_API_KEY`, run `/vot-serve gemma4-12b-qat`. Expected: refused naming `VOT_API_KEY`, no Azure call made.
 - [ ] **Step 3: Review Focus 5** — a custom `.vot/presets/huge.yaml` (`name: huge`, `model: google/gemma-4-31B-it`, `gpu_memory_gb: 96`), `/vot-serve huge`. Expected: refused, no profile fits. Remove the file.
 - [ ] **Step 4: Review Focus 1** — a custom `.vot/presets/typo.yaml` with `vllm_arg:`, `/vot-serve typo`. Expected: schema error, nothing created. Remove the file.
-- [ ] **Step 5: `export VOT_API_KEY=<a random string>`, `/vot-serve gemma4-12b-qat`.** Expected: `gpu-t4`, ready within 30 min, the `curl` with the Bearer header answers; a request without it gets 401. If vLLM fails in fp16 on T4, set `gpu_memory_gb: 80` in the preset, destroy, serve again on `gpu-a100`.
+- [ ] **Step 5: `export VOT_API_KEY=<a random string>`, `/vot-serve gemma4-12b-qat`.** Expected: `gpu-t4`, ready within 30 min, the `curl` with the Bearer header answers; a request without it gets 401; `az containerapp show --name vot-gemma4-12b-qat --resource-group rg-vot --query properties.configuration.ingress.ipSecurityRestrictions` lists the `caller` rule with this machine's IP. If vLLM fails in fp16 on T4, set `gpu_memory_gb: 80` in the preset, destroy, serve again on `gpu-a100`.
 - [ ] **Step 6: `/vot-destroy gemma4-12b-qat`.** Expected: the app is gone, the environment remains.
 - [ ] **Step 7: Fix the reference, commit**
 
@@ -1054,7 +1099,7 @@ git commit -m "fix(stack-guide): aca verified live"
 
 ### Task 10: Review, PR, merge, first release
 
-- [ ] **Step 1:** Dispatch a fresh reviewer sub-agent (most capable model) over the whole branch against `main`, with the spec as the requirement; fix its findings; the same reviewer re-checks until it returns none.
+- [ ] **Step 1:** Dispatch a fresh reviewer sub-agent (most capable model) over `fix/live-acceptance` against `main`, with the spec as the requirement; fix its findings; the same reviewer re-checks until it returns none.
 - [ ] **Step 2:** Push; the PR body lists the live results of Tasks 8–9 and the review outcome. Merge only on the maintainer's go.
 - [ ] **Step 3:** On the maintainer's request only: `git tag v0.1.0 && git push origin v0.1.0`; watch `release.yml` open, merge and tag the release PR; confirm `plugin.json` on `main` reads `0.1.0` and the GitHub release exists.
 - [ ] **Step 4:** On the maintainer's go, submit `https://github.com/using-system/vllm-on-tap/blob/main/plugin.json` to otelyssey through its plugin submission issue (spec section 12); admission is the reviewer's call.

@@ -226,7 +226,9 @@ its metrics are a Prometheus `/metrics` endpoint with no OTLP export
 When the environment has `otlp_endpoint`, `/vot-serve` passes
 `--otlp-traces-endpoint <otlp_endpoint>`. vLLM defaults to gRPC; when the
 endpoint is OTLP/HTTP (port 4318 or a `/v1/traces` path), it also sets
-`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf`. `OTEL_SERVICE_NAME` is
+`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and passes the full URL
+ending in `/v1/traces` (vLLM hands the value to the exporter verbatim),
+appending the path when the environment's value lacks it. `OTEL_SERVICE_NAME` is
 set to `vot-<preset>`. The flags and their prerequisites (the OpenTelemetry
 packages in the local install) are `vllm-guide`'s.
 
@@ -240,7 +242,7 @@ a Container App. Destroy finds it by that name.
 | `local-vllm` | `vllm serve <model> --host 127.0.0.1 --port <port> --served-model-name <name> <vllm_args>` in the background; PID in `.vot/run/vot-<preset>.pid`, output in `.vot/run/vot-<preset>.log` | stop the PID, remove its `.vot/run/` files |
 | `local-vllm-metal` | the same with vllm-metal's `vllm` and the MLX model | the same |
 | `local-vllm-docker` | `docker run -d --name vot-<preset> --gpus all --ipc=host -p 127.0.0.1:<port>:8000 -v ~/.cache/huggingface:/root/.cache/huggingface <image> --model <model> …` | `docker rm -f vot-<preset>` |
-| `aca` | `az containerapp create --name vot-<preset>` in the environment: the pinned `vllm/vllm-openai` image pulled from Docker Hub, the GPU workload profile chosen from `gpu_memory_gb` (T4 when it fits 16 GB, A100 otherwise), external ingress on port 8000, one fixed replica (min = max = 1), the API key stored as a Container App secret and required by vLLM (`--api-key`) | `az containerapp delete --name vot-<preset> --yes`; the Container Apps environment and its GPU profiles stay |
+| `aca` | `az containerapp create --name vot-<preset> --yaml` in the environment (the YAML carries vLLM's flags, which `--args` cannot): the pinned `vllm/vllm-openai` image pulled from Docker Hub, the GPU workload profile chosen from `gpu_memory_gb` (T4 when it fits 16 GB, A100 up to 80 GB, refused above), external ingress on port 8000 restricted to the caller's public IP, one fixed replica (min = max = 1), the API key stored as a Container App secret and passed to vLLM as `VLLM_API_KEY` | `az containerapp delete --name vot-<preset> --yes`; the Container Apps environment and its GPU profiles stay |
 
 Decisions carried by this table:
 
@@ -250,8 +252,11 @@ Decisions carried by this table:
 - **One fixed replica on ACA**, no scale-to-zero: a cold start (image and
   weights) outlasts an HTTP request's timeout, so a first request after
   scale-to-zero would fail. Billing runs while the app exists.
-- **An API key on ACA**: the ingress is public. The key's value comes from
-  the variable named by `api_key_env`; it is never written to a file.
+- **An API key and an IP restriction on ACA**: the ingress is public. The
+  key's value comes from the variable named by `api_key_env`; it is never
+  written to a file. vLLM's key covers `/v1`, `/v2`, `/inference` and
+  `/cohere` only (other routes such as `/invocations` stay open), so the
+  ingress also admits only the serving machine's public IP.
 - **Local stacks listen on 127.0.0.1 only**, with no key.
 - **Image pins**: the docker and aca references pin `vllm/vllm-openai` to
   the vLLM release current at implementation (v0.30.0 on 2026-09-26); an
