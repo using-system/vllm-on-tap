@@ -35,5 +35,5 @@ Read local-vllm.md's *Destroy* section only.
   `sysctl -n hw.memsize` / 1e9, leaving ~8 GB to macOS; warn when tighter.
 - Supported models: https://github.com/vllm-project/vllm-metal/blob/main/docs/supported_models.md
 - `--dtype` and CUDA-only flags (`--tensor-parallel-size` > 1) do not apply.
-- Gemma 4 MLX checkpoints crash at start (`Can't load video processor`) unless served with `--language-model-only` (text only); the builtin Gemma 4 presets set it in their `local-vllm-metal` override.
-- vllm-metal 0.30.0 serves `mlx-community/gemma-4-12B-it-4bit` but generates garbage (the same checkpoint is coherent under `mlx_lm`); use `gemma4-e4b-qat` or `gemma4-e2b-qat` on this stack.
+- Gemma 4 MLX checkpoints crash at start (`Can't load video processor`) unless served with `--language-model-only` (text only, https://github.com/vllm-project/vllm-metal/issues/831); the builtin Gemma 4 presets set it in their `local-vllm-metal` override.
+- vllm-metal 0.30.0 serves `mlx-community/gemma-4-12B-it-4bit` but generates garbage (the same checkpoint is coherent under `mlx_lm`); use `gemma4-e4b-qat` or `gemma4-e2b-qat` on this stack (https://github.com/vllm-project/vllm-metal/issues/832).
