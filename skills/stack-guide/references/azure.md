@@ -17,7 +17,7 @@ graphs across serves.
 ## Config fields
 
 - `subscription` - optional; absent means the subscription `az account show` reports (the logged-in default). Set it only to pin another one, by the name `az account list --query "[].name" -o tsv` prints. Leave it out of an environment committed to a public repository.
-- `location` - a region with serverless A100 GPUs: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`.
+- `location` - a region with serverless A100 GPUs: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`. When `<environment>` resolves, its region wins: *Prepare* reads it (`az containerapp env show --name <environment> --resource-group <resource_group> --query location -o tsv`, lowercased without spaces) and writes it as `location`, and refuses when it is not one of these regions (in `/vot-config`, ask for another `resource_group`).
 - `resource_group` - default `rg-vot`; dedicated to vllm-on-tap.
 - `image` - optional; default `vllm/vllm-openai:v0.30.0`.
 
@@ -48,11 +48,32 @@ When `subscription` is set, every command below runs with `--subscription "<subs
 
 ## Prepare
 
-Each step: reuse when it exists, create on the user's yes otherwise. The
-resource group comes first; `<environment>` and `<storage>` resolve after
-it (a resource group just created holds neither). The environment exists
-when `<environment>` resolved; otherwise it is created as `vot-env`, which
-then is `<environment>`.
+Every resource is reused when it exists. When one is missing - the
+resource group, the Container Apps environment, the storage - ask the user
+who creates it: vllm-on-tap, now, with the commands below; or the user,
+beforehand, with their own network rules (a VNet, private endpoints...),
+then `/vot-config` again, which discovers what they created. Only the
+region and the resource group are config; vllm-on-tap finds the rest in
+it. On "the user": write the environment, then stop and ask them to run
+`/vot-config` again once it exists.
+
+The resource group comes first; `<environment>` and `<storage>` resolve
+after it (a resource group just created holds neither). The environment
+exists when `<environment>` resolved; otherwise it is created as
+`vot-env`, which then is `<environment>`. An environment the user created
+must have workload profiles: `az containerapp env show --name <environment>
+--resource-group <resource_group> --query properties.workloadProfiles -o tsv`
+printing nothing means a Consumption-only environment, which cannot be
+converted - refuse, and tell the user to recreate it with workload
+profiles, or to remove it so vllm-on-tap creates `vot-env`. Its missing
+`gpu-a100` profile is added the same way as below, on the user's yes.
+
+The environment is **internal** when `az containerapp env show --name
+<environment> --resource-group <resource_group> --query
+properties.vnetConfiguration.internal -o tsv` prints `true` (created by the
+user on their VNet, with no public endpoint). *Serve* then exposes the app
+to that VNet only: say so at *Prepare*, since the model is then reached
+from inside the VNet (a VPN, a bastion, a peered network).
 
 ```bash
 az group show --name <resource_group>
@@ -72,7 +93,9 @@ the environment anyway.
 Then the optional storage - not required, an environment serves
 without it. `<storage>` resolved: reuse it, and make sure its share and
 its environment storage below exist. None: offer to create one, saying
-what it brings and what it costs; on a no, there is no storage.
+what it brings and what it costs - or to let the user create it (a
+StorageV2 account with large file shares enabled, so it is discovered);
+on a no, there is no storage.
 
 **Storage (`<storage>`)**: the Hugging Face cache (`HF_HOME`)
 and vLLM's cache (`VLLM_CACHE_ROOT`, its torch.compile artifacts) live on
@@ -126,7 +149,8 @@ Checks, in this order, stopping at the first refusal (`<environment>` and
 2. Profile: always `gpu-a100` (cpu `24`, memory `220Gi`, one A100 80 GB); a preset with `gpu_memory_gb` > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. `<storage>` resolved: `az containerapp env storage show --name <environment> --resource-group <resource_group> --storage-name vot-cache` fails -> refuse and route to `/vot-config`.
-5. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
+5. Internal environment (see *Prepare*): `<internal>` is `true`, otherwise `false`.
+6. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
 
 Create. `az containerapp create --args` cannot carry vLLM's `--flags` (az
 parses them as its own), so the app is created from a YAML spec, built with
@@ -139,13 +163,13 @@ Container App secret `vllm-api-key` is the only place the key lives - see
 
 ```bash
 ENV_ID="$(az containerapp env show --name <environment> --resource-group <resource_group> --query id -o tsv)"
-CALLER_IP="$(curl -fsS https://api.ipify.org)"
+CALLER_IP="$(curl -fsS https://api.ipify.org)"; [ -n "$CALLER_IP" ] || exit 1   # only when not internal
 VOT_API_KEY="$(openssl rand -hex 32)"; [ -n "$VOT_API_KEY" ] || exit 1; export VOT_API_KEY
 ARGS='["<model>","--served-model-name","<served name>","--port","8000", <vllm args as JSON strings>]'
 ENVS='[{"name":"VLLM_API_KEY","secretRef":"vllm-api-key"}]'   # + {"name":"HF_TOKEN","secretRef":"hf-token"}, {"name":"OTEL_SERVICE_NAME","value":"vot-<preset>"}, {"name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","value":"http/protobuf"} when they apply
 az containerapp create --name vot-<preset> --resource-group <resource_group> --yaml <(jq -n \
   --arg loc "<location>" --arg env "$ENV_ID" --arg wp "<profile>" --arg img "<image>" \
-  --arg ip "$CALLER_IP/32" --argjson cpu <cpu> --arg mem "<memory>" \
+  --arg ip "${CALLER_IP:-}/32" --argjson internal <internal> --argjson cpu <cpu> --arg mem "<memory>" \
   --argjson args "$ARGS" --argjson envs "$ENVS" \
   --argjson hf <true when the preset lists HF_TOKEN, else false> \
   --argjson cache <true when <storage> resolved, else false> '{
@@ -155,8 +179,8 @@ az containerapp create --name vot-<preset> --resource-group <resource_group> --y
       workloadProfileName: $wp,
       configuration: {
         activeRevisionsMode: "Single",
-        ingress: {external: true, targetPort: 8000, transport: "auto", allowInsecure: false,
-          ipSecurityRestrictions: [{name: "caller", ipAddressRange: $ip, action: "Allow"}]},
+        ingress: ({external: true, targetPort: 8000, transport: "auto", allowInsecure: false}
+          + (if $internal then {} else {ipSecurityRestrictions: [{name: "caller", ipAddressRange: $ip, action: "Allow"}]} end)),
         secrets: ([{name: "vllm-api-key", value: env.VOT_API_KEY}]
           + (if $hf then [{name: "hf-token", value: env.HF_TOKEN}] else [] end))
       },
@@ -179,7 +203,9 @@ az containerapp create --name vot-<preset> --resource-group <resource_group> --y
 shell command, so the key dies with it. Base URL:
 `https://$(az containerapp show --name vot-<preset> --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv)`.
 Say it: billing runs until `/vot-destroy <preset>`, and only this machine's
-public IP can reach the app (`/vot-serve` again from another network).
+public IP can reach the app (`/vot-serve` again from another network) - or,
+on an internal environment, only the environment's VNet, with a private
+base URL.
 
 ## API key
 
@@ -200,9 +226,17 @@ A new serve generates a new key; a destroy removes it with the app.
 
 `curl -sf <auth header> <base url>/v1/models`
 lists `<served name>`; poll every 20 s for up to 30 min (image pull ~10 GB,
-then the weights, from Hugging Face or the `vot-cache` share). A poll that
-keeps failing while the log shows `Application startup complete` means
-the key fetch failed, not the app: check `az account show`. On timeout:
+then the weights, from Hugging Face or the `vot-cache` share). On an
+internal environment the base URL only answers from inside its VNet: try
+the `curl` once, and when it cannot resolve or connect (curl exit 6 or 7,
+not an HTTP status), poll the log instead - the readiness proof is then
+the line `Application startup complete` in
+`az containerapp logs show --name vot-<preset> --resource-group <resource_group> --tail 50`,
+and the report hands the user the `curl` to run from inside the VNet (with
+`az` logged in there, since `<auth header>` reads the key with it). On a
+base URL this machine reaches, a poll that keeps failing while the log
+shows `Application startup complete` means the key fetch failed, not the
+app: check `az account show`. On timeout:
 `az containerapp logs show --name vot-<preset> --resource-group <resource_group> --tail 50`;
 when the container never started, also
 `az containerapp logs show --name vot-<preset> --resource-group <resource_group> --type system --tail 50`.
@@ -231,13 +265,17 @@ everything and is the user's call, never a destroy's.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
 - The platform driver sets the CUDA ceiling (driver 570 -> CUDA 12.x, 580 -> 13.x): an image built for a newer CUDA fails at start - check the log's CUDA error first.
 - jq reads the secret values from the environment (`env[...]`), so they never go into a file or a command line; never move them to `--arg`/`--argjson`, which `ps` shows, and never echo the key - fetch it with `az containerapp secret show` where it is used.
-- The API key covers `/v1`, `/v2`, `/inference`, `/cohere` only; `/invocations`, `/tokenize`, `/pause`, `/abort_requests`, `/update_weights` are protected by the ingress IP restriction alone - never remove it.
-- The caller's IP changes (another network, a VPN): update the rule with `az containerapp ingress access-restriction set --name vot-<preset> --resource-group <resource_group> --rule-name caller --ip-address <new ip>/32 --action Allow`.
+- The API key covers `/v1`, `/v2`, `/inference`, `/cohere` only; `/invocations`, `/tokenize`, `/pause`, `/abort_requests`, `/update_weights` are protected by the ingress IP restriction alone - never remove it (on an internal environment no IP rule is ever added: see the internal trap below).
+- The caller's IP changes (another network, a VPN), not internal: update the rule with `az containerapp ingress access-restriction set --name vot-<preset> --resource-group <resource_group> --rule-name caller --ip-address <new ip>/32 --action Allow`.
 - An `otlp_endpoint` on `localhost` or a private address is unreachable from the app.
 - The image sets no `HF_HOME` and its runtime home is not `/root` (vLLM writes `/tmp/.cache`): the cache must be pointed at the mount with `HF_HOME` and `VLLM_CACHE_ROOT`, never by mounting over `/root/.cache`, which stays empty.
 - vLLM does not recognize the SMB (CIFS) mount as a network filesystem, so it disables auto-prefetch and reads the weights through mmap, page by page; the spec forces `--safetensors-load-strategy prefetch` when `<storage>` resolved.
 - The `vot-cache` mount needs `mfsymlinks`: the Hugging Face cache links its snapshots to its blobs, and SMB has no symlinks without it.
 - The environment storage keeps a copy of the account key: after a key rotation, re-run the `az rest` registration of *Prepare*, or the mount fails at start.
+- An internal environment has no IP rule on the app (its callers come from private addresses): the ingress is reachable from the whole VNet, the API key still guards `/v1` - the routes it leaves open are reachable from the VNet too.
+- An internal environment's FQDN resolves only through a private DNS zone for the environment's default domain, pointing to its static IP, which the user creates on their VNet; without it even a caller inside the VNet gets no answer.
+- A storage account with network rules or private endpoints only must let the environment's subnet reach it, or the `vot-cache` mount fails at start and the revision never runs.
+- An environment on a VNet needs outbound access to the image registry (Docker Hub) and to `huggingface.co`; a route table or firewall that blocks it stops the pull or the weights download.
 - A storage account name is global: the generated name is checked with `check-name` before a create, and generated again when taken.
 - Another StorageV2 account with large file shares, or a second Container Apps environment, in `<resource_group>` makes *Prepare* and *Serve* refuse (*Destroy* still runs): move it out, or use a resource group dedicated to vllm-on-tap.
 - `mountOptions` on the `vot-cache` volume accepts `mfsymlinks,nobrl`; `actimeo` is refused (`ContainerAppVolumeMountOptionsNotSupported`).

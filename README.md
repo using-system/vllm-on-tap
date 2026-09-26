@@ -38,7 +38,11 @@ An environment targets one stack:
   provisions a Container App with a serverless GPU, on demand, and each
   destroy removes it. An optional storage account caches the Hugging Face
   model weights and vLLM's compiled graphs, so a preset's later serves
-  start faster.
+  start faster. An `azure` environment names a region and a resource
+  group: vllm-on-tap creates what is missing in it, or discovers the
+  Container Apps environment and the storage you created there yourself,
+  with your own network rules (a VNet, private endpoints...) - an
+  internal environment serves the model to its VNet only.
 
 Planned, not supported in this version yet:
 
