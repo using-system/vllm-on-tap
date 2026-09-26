@@ -1,0 +1,14 @@
+name: gemma4-e4b-qat
+description: Gemma 4 E4B instruction-tuned (4.5B effective parameters), Google's QAT 4-bit weights (compressed-tensors, w4a16); MLX 4-bit on local-vllm-metal
+model: google/gemma-4-E4B-it-qat-w4a16-ct
+served_model_name: gemma4-e4b
+gpu_memory_gb: 16
+vllm_args:
+  --max-model-len: 16384
+  --gpu-memory-utilization: 0.90
+env: []
+stacks:
+  local-vllm-metal:
+    model: mlx-community/gemma-4-e4b-it-4bit
+    vllm_args:
+      --language-model-only: true

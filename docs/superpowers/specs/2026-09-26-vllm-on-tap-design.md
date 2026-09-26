@@ -10,9 +10,10 @@ vllm-on-tap is an agent plugin that serves a vLLM **preset** on an
 runs: configure an environment, serve a preset, destroy it. Building and
 destroying is meant to be cheap and repeatable — "vLLM on tap".
 
-Success for v1: `gemma4-12b-qat` configured, served, answering one chat
-request and destroyed, end to end, on `local-vllm-metal` and on `aca`, with
-its traces seen in an OTLP collector at least once.
+Success for v1: a builtin Gemma 4 preset configured, served, answering one
+chat request and destroyed, end to end, on `local-vllm-metal`
+(`gemma4-e4b-qat`) and on `aca` (`gemma4-12b-qat`), with its traces seen in
+an OTLP collector at least once.
 
 Out of scope for v1: an image registry (ACR), a model-weight cache, metrics
 export, an OpenTelemetry Collector of our own, several replicas or
@@ -56,7 +57,9 @@ vllm-on-tap/
 │   └── vllm-guide/SKILL.md
 ├── presets/
 │   ├── schema.json
-│   └── gemma4-12b-qat.yaml
+│   ├── gemma4-12b-qat.yaml
+│   ├── gemma4-e4b-qat.yaml
+│   └── gemma4-e2b-qat.yaml
 ├── .github/workflows/
 │   ├── ci.yml
 │   └── release.yml
@@ -100,10 +103,10 @@ A preset states what vLLM serves, never where or how it is hosted: no image,
 region, port or resource name.
 
 ```yaml
-name: gemma4-12b-qat
-description: Gemma 4 12B instruction-tuned, Google's QAT 4-bit weights (compressed-tensors, w4a16)
-model: google/gemma-4-12B-it-qat-w4a16-ct
-served_model_name: gemma4-12b
+name: gemma4-e4b-qat
+description: Gemma 4 E4B instruction-tuned (4.5B effective parameters), Google's QAT 4-bit weights (compressed-tensors, w4a16); MLX 4-bit on local-vllm-metal
+model: google/gemma-4-E4B-it-qat-w4a16-ct
+served_model_name: gemma4-e4b
 gpu_memory_gb: 16
 vllm_args:
   --max-model-len: 16384
@@ -111,7 +114,9 @@ vllm_args:
 env: []
 stacks:
   local-vllm-metal:
-    model: mlx-community/gemma-4-12B-it-4bit
+    model: mlx-community/gemma-4-e4b-it-4bit
+    vllm_args:
+      --language-model-only: true
 ```
 
 | Field | Required | Meaning |
@@ -137,11 +142,10 @@ stack type's `stacks.<type>` block is merged into the preset after
 resolution.
 
 **Gemma 4 12B QAT notes.** The weights are not gated (Apache-2.0), so the
-preset needs no token. Compressed-tensors w4a16 runs from compute
-capability 7.5 (Turing, T4) in vLLM; T4 has no bf16, so vLLM runs fp16
-there — whether Gemma 4 is stable in fp16 is verified live, and if not
-the preset's `gpu_memory_gb` moves to the A100 profile. vllm-metal runs
-MLX weights, hence the `local-vllm-metal` override.
+preset needs no token. vllm-metal runs MLX weights, hence the
+`local-vllm-metal` overrides of the E2B and E4B presets; the 12B MLX
+checkpoint generates garbage under vllm-metal 0.30.0, so the 12B preset
+is NVIDIA-only.
 
 ## 5. Environments
 
@@ -187,7 +191,7 @@ config:
 4. Asks the `config` fields, with the defaults above.
 5. `aca` only — prepares what is slow and durable so that serving only
    creates the app: the resource group, the Container Apps environment and
-   its serverless GPU workload profiles (T4 and A100). Each resource is
+   its serverless A100 GPU workload profile (`gpu-a100`). Each resource is
    reused when it exists, created on the user's yes otherwise. A missing GPU
    quota is reported with the way to request it, and does not block saving
    the environment.
@@ -242,7 +246,7 @@ a Container App. Destroy finds it by that name.
 | `local-vllm` | `vllm serve <model> --host 127.0.0.1 --port <port> --served-model-name <name> <vllm_args>` in the background; PID in `.vot/run/vot-<preset>.pid`, output in `.vot/run/vot-<preset>.log` | stop the PID, remove its `.vot/run/` files |
 | `local-vllm-metal` | the same with vllm-metal's `vllm` and the MLX model | the same |
 | `local-vllm-docker` | `docker run -d --name vot-<preset> --gpus all --ipc=host -p 127.0.0.1:<port>:8000 -v ~/.cache/huggingface:/root/.cache/huggingface <image> --model <model> …` | `docker rm -f vot-<preset>` |
-| `aca` | `az containerapp create --name vot-<preset> --yaml` in the environment (the YAML carries vLLM's flags, which `--args` cannot): the pinned `vllm/vllm-openai` image pulled from Docker Hub, the GPU workload profile chosen from `gpu_memory_gb` (T4 when it fits 16 GB, A100 up to 80 GB, refused above), external ingress on port 8000 restricted to the caller's public IP, one fixed replica (min = max = 1), the API key stored as a Container App secret and passed to vLLM as `VLLM_API_KEY` | `az containerapp delete --name vot-<preset> --yes`; the Container Apps environment and its GPU profiles stay |
+| `aca` | `az containerapp create --name vot-<preset> --yaml` in the environment (the YAML carries vLLM's flags, which `--args` cannot): the pinned `vllm/vllm-openai` image pulled from Docker Hub, the `gpu-a100` serverless profile (a preset needing more than 80 GB is refused), external ingress on port 8000 restricted to the caller's public IP, one fixed replica (min = max = 1), the API key stored as a Container App secret and passed to vLLM as `VLLM_API_KEY` | `az containerapp delete --name vot-<preset> --yes`; the Container Apps environment and its GPU profiles stay |
 
 Decisions carried by this table:
 
@@ -275,7 +279,7 @@ the `stacks.<type>` merge, the validation, and the list of builtin presets.
 
 **`vllm-guide`** — the vLLM capabilities a preset or a serve needs:
 `--max-model-len`, `--gpu-memory-utilization`, quantization,
-`--tensor-parallel-size`, `--dtype` (fp16 on T4), `--api-key`, tracing
+`--tensor-parallel-size`, `--dtype`, `--api-key`, tracing
 (`--otlp-traces-endpoint`, the protocol variable, the OpenTelemetry
 packages), and the OpenAI-compatible API (`/v1/models`,
 `/v1/chat/completions`) — each entry linked to vLLM's documentation.
