@@ -16,12 +16,9 @@ an OTLP endpoint, the served vLLM exports its request traces there.
 
 ## Install
 
-The repository root is the plugin. Install it through a marketplace that
-lists it, or try it straight from a clone:
-
-```
-claude --plugin-dir <path to the clone>
-```
+vllm-on-tap is listed in the [otelyssey marketplace](https://github.com/using-system/otelyssey/blob/main/marketplace/vllm-on-tap/README.md),
+which gives the install commands for each agent CLI (Claude Code, GitHub
+Copilot CLI, Codex CLI...).
 
 ## Use
 
@@ -65,15 +62,6 @@ preset of the same name shadows the builtin one.
 vLLM exports traces (not metrics) over OTLP. Set `otlp_endpoint` on an
 environment and every preset served on it exports its request traces
 there.
-
-## Cost and exposure
-
-On `azure`, the Container App bills for as long as it exists - there is no
-scale-to-zero, so `/vot-destroy` is how the billing stops. Its ingress is
-public but restricted to the serving machine's public IP, and requests
-must carry an API key that `/vot-serve` generates and stores as the app's
-secret - nothing to export beforehand; the `curl` it prints reads the key
-back with `az`.
 
 ## License
 
