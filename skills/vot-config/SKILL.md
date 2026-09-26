@@ -9,21 +9,26 @@ State lives in the user's repository under `.vot/`:
 `.vot/environments/<name>.yaml` (committed) and `.vot/config.yaml`
 (`current: <name>`, gitignored). Never write a secret into either.
 
-1. **First run.** When `.vot/` does not exist, append to the repository's
-   `.gitignore` the two lines `.vot/config.yaml` and `.vot/run/`.
+1. **Gitignore.** Ensure the repository's `.gitignore` contains
+   `.vot/config.yaml` and `.vot/run/`, appending whichever is missing
+   (every run, idempotent).
 2. **Choose.** List `.vot/environments/*.yaml` (name, stack) and the current
    one; offer: create one, update one, or make one current (then go to step 8).
 3. **Stack type.** On create: ask the name and the stack type
    (`local-vllm`, `local-vllm-metal`, `local-vllm-docker`, `aca`). Read the
    stack-guide skill's reference for that type.
-4. **Tools.** Run that reference's *Prerequisites and install* checks. For a
-   missing tool, show its install command and run it only on the user's yes;
-   what is the user's (a driver, `az login`) is stated, never done.
-5. **Config.** Ask the reference's *Config fields*, showing the defaults.
+4. **Tools.** Run stack-guide's common prerequisite check plus that
+   reference's *Prerequisites and install* checks. For a missing tool, show
+   its install command and run it only on the user's yes; what is the
+   user's (a driver, `az login`) is stated, never done.
+5. **Config.** Ask the reference's *Config fields*, showing the defaults;
+   on `aca`, also check `printenv <api_key_env>` and warn with the
+   reference's *Serve* check 1 guidance when it prints nothing - a warning,
+   never blocking the save.
 6. **Prepare.** When the reference has a *Prepare* section, run it.
 7. **Traces.** Ask `otlp_endpoint` (optional, empty to skip). On `aca`, warn
    when it names `localhost` or a private address.
-8. **Write.** Write `.vot/environments/<name>.yaml`:
+8. **Write.** On create or update, write `.vot/environments/<name>.yaml`:
 
    ```yaml
    name: <name>
@@ -33,5 +38,6 @@ State lives in the user's repository under `.vot/`:
      <field>: <value>
    ```
 
-   then `.vot/config.yaml` with `current: <name>`, and print a summary: the
-   environment, its stack, its config, whether traces are exported.
+   Always, including make-current: write `.vot/config.yaml` with
+   `current: <name>`, and print a summary: the environment, its stack, its
+   config, whether traces are exported.

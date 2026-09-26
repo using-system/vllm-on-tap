@@ -16,17 +16,18 @@ None.
 
 ## Serve
 
-Identical to local-vllm's *Serve* (same checks, same command, same
-`.vot/run/` files), with the preset's `local-vllm-metal` model - MLX weights
+Read local-vllm.md's *Serve* section only (not its banner or its
+*Prerequisites and install*): same checks, same command, same `.vot/run/`
+files, with the preset's `local-vllm-metal` model - MLX weights
 (`mlx-community/...`); vllm-metal does not load compressed-tensors checkpoints.
 
 ## Ready when
 
-Identical to local-vllm's, up to 15 min.
+Read local-vllm.md's *Ready when* section only, up to 15 min.
 
 ## Destroy
 
-Identical to local-vllm's.
+Read local-vllm.md's *Destroy* section only.
 
 ## Traps
 

@@ -43,7 +43,11 @@ when the PID dies: `tail -n 50 .vot/run/vot-<preset>.log`.
 ## Destroy
 
 ```bash
-kill "$(cat .vot/run/vot-<preset>.pid)"; sleep 5; kill -9 "$(cat .vot/run/vot-<preset>.pid)" 2>/dev/null
+PID="$(cat .vot/run/vot-<preset>.pid)"
+kill "$PID"
+for i in $(seq 1 30); do kill -0 "$PID" 2>/dev/null || break; sleep 2; done
+kill -0 "$PID" 2>/dev/null && { pkill -9 -P "$PID"; kill -9 "$PID"; }
+pgrep -f "vllm serve" && echo "leftover vllm serve process(es) - report them"
 rm -f .vot/run/vot-<preset>.pid .vot/run/vot-<preset>.log .vot/run/<preset>.yaml
 ```
 

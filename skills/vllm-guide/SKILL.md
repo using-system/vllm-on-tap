@@ -54,7 +54,7 @@ Documentation root: https://docs.vllm.ai/en/latest/
 
 ```bash
 curl -s <base url>/v1/chat/completions -H 'Content-Type: application/json' \
-  [-H "Authorization: Bearer ${<api_key_env>}"] \
+  [-H @<(printf 'Authorization: Bearer %s' "${<api_key_env>}")] \
   -d '{"model":"<served name>","messages":[{"role":"user","content":"Say hello in one sentence."}],"max_tokens":64}'
 ```
 

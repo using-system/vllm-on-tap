@@ -15,14 +15,21 @@ Every reference has these sections, in this order:
 - **Config fields** - the `config` keys of an environment of this type, with defaults.
 - **Prepare** - what `/vot-config` creates once (only `aca` has one).
 - **Serve** - numbered checks, run in their written order and stopping at the first refusal (the "already served" one leads to the destroy-or-stop question), then the exact command that starts unit `vot-<preset>`.
-- **Ready when** - the readiness check and its time bound.
+- **Ready when** - the readiness check and its time bound; poll across
+  several bounded tool calls (each under the host's tool-call limit, e.g.
+  5 min), never one long loop.
 - **Destroy** - the exact command that removes unit `vot-<preset>`.
 - **Traps** - one line each.
+
+Common prerequisite (every type): `uvx --version` succeeds - install
+`brew install uv` or the official script
+https://docs.astral.sh/uv/getting-started/installation/ (on the user's yes).
 
 Placeholders used in the references: `<preset>` (the preset name),
 `<model>`, `<served name>`, `<vllm args>` (the merged `vllm_args` rendered
 as `--flag value`, `true` as `--flag`, `false` omitted), `<port>` and the
-other `config` fields by their key.
+other `config` fields by their key. `[...]` marks a part included only
+when its condition applies, without the brackets.
 
 Tracing (every type): when the environment has `otlp_endpoint`, add
 `--otlp-traces-endpoint <otlp_endpoint>` to `<vllm args>` and set

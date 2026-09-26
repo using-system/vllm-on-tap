@@ -45,7 +45,7 @@ the environment anyway.
 
 Checks, in this order, stopping at the first refusal:
 
-1. `printenv <api_key_env>` prints nothing (unset, or set but not exported) -> refuse before any Azure call, naming the variable and asking for `export <api_key_env>=...`. The same holds for `HF_TOKEN` when the preset lists it.
+1. `printenv <api_key_env>` prints nothing (unset, or set but not exported) -> refuse before any Azure call, naming the variable: export it in the shell the agent session is started from, then restart the session; never paste the key into the conversation or a command; generate one with `openssl rand -hex 32` run by the user in that shell. The same holds for `HF_TOKEN` when the preset lists it.
 2. Profile from `gpu_memory_gb`: <= 16 -> `gpu-t4` (cpu `8`, memory `56Gi`); <= 80 -> `gpu-a100` (cpu `24`, memory `220Gi`); > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
@@ -93,19 +93,26 @@ public IP can reach the app (`/vot-serve` again from another network).
 
 ## Ready when
 
-`curl -sf -H "Authorization: Bearer ${<api_key_env>}" <base url>/v1/models`
+`curl -sf -H @<(printf 'Authorization: Bearer %s' "${<api_key_env>}") <base url>/v1/models`
 lists `<served name>`; poll every 20 s for up to 30 min (image pull ~10 GB,
 then the weights). On timeout:
-`az containerapp logs show --name vot-<preset> --resource-group <resource_group> --tail 50`.
+`az containerapp logs show --name vot-<preset> --resource-group <resource_group> --tail 50`;
+when the container never started, also
+`az containerapp logs show --name vot-<preset> --resource-group <resource_group> --type system --tail 50`.
 
 ## Destroy
+
+```bash
+az containerapp show --name vot-<preset> --resource-group <resource_group>
+```
+
+Fails: report that the unit does not exist, stop. Succeeds:
 
 ```bash
 az containerapp delete --name vot-<preset> --resource-group <resource_group> --yes
 ```
 
-`ResourceNotFound`: report that the unit does not exist. The environment and
-its GPU profiles stay; `az group delete --name <resource_group>` removes
+The environment and its GPU profiles stay; `az group delete --name <resource_group>` removes
 everything and is the user's call, never a destroy's.
 
 ## Traps
