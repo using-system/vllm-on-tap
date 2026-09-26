@@ -10,14 +10,14 @@
 
 ## Config fields
 
-- `subscription` - name as `az account list --query "[].name" -o tsv` prints it.
+- `subscription` - optional; absent means the subscription `az account show` reports (the logged-in default). Set it only to pin another one, by the name `az account list --query "[].name" -o tsv` prints. Leave it out of an environment committed to a public repository.
 - `location` - a region with serverless A100 GPUs: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`.
 - `resource_group` - default `rg-vot`.
 - `environment` - the Container Apps environment; default `vot-env`.
 - `api_key_env` - the name of the shell variable holding the API key; default `VOT_API_KEY`.
 - `image` - optional; default `vllm/vllm-openai:v0.30.0`.
 
-Every command below runs with `--subscription "<subscription>"`.
+When `subscription` is set, every command below runs with `--subscription "<subscription>"`; otherwise without it.
 
 ## Prepare
 
