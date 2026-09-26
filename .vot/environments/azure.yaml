@@ -4,4 +4,4 @@ config:
   location: swedencentral
   resource_group: rg-vot
   environment: vot-env
-  api_key_env: VOT_API_KEY
+  storage: votcache7b4a25

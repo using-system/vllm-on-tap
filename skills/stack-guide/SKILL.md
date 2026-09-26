@@ -15,6 +15,8 @@ Every reference has these sections, in this order:
 - **Config fields** - the `config` keys of an environment of this type, with defaults.
 - **Prepare** - what `/vot-config` creates once (only `aca` has one).
 - **Serve** - numbered checks, run in their written order and stopping at the first refusal (the "already served" one leads to the destroy-or-stop question), then the exact command that starts unit `vot-<preset>`.
+- **API key** - how requests authenticate and where the key is read from
+  (only `aca` has one).
 - **Ready when** - the readiness check and its time bound; poll across
   several bounded tool calls (each under the host's tool-call limit, e.g.
   5 min), never one long loop.
