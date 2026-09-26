@@ -1,6 +1,6 @@
 ---
 name: vot-config
-description: Create, update or select a vllm-on-tap environment - its stack type (local-vllm, local-vllm-metal, local-vllm-docker, aca), its config and its optional OTLP traces endpoint - checking and offering to install the tools it needs, and on aca preparing the resource group, the Container Apps environment and its GPU profiles. Use when the user wants to configure where presets are served.
+description: Create, update or select a vllm-on-tap environment - its stack type (local-vllm, local-vllm-metal, local-vllm-docker, aca), its config and its optional OTLP traces endpoint - checking and offering to install the tools it needs, and on aca preparing the resource group, the Container Apps environment, its GPU profiles and an optional cache storage account. Use when the user wants to configure where presets are served.
 ---
 
 # /vot-config
@@ -21,10 +21,7 @@ State lives in the user's repository under `.vot/`:
    reference's *Prerequisites and install* checks. For a missing tool, show
    its install command and run it only on the user's yes; what is the
    user's (a driver, `az login`) is stated, never done.
-5. **Config.** Ask the reference's *Config fields*, showing the defaults;
-   on `aca`, also check `printenv <api_key_env>` and warn with the
-   reference's *Serve* check 1 guidance when it prints nothing - a warning,
-   never blocking the save.
+5. **Config.** Ask the reference's *Config fields*, showing the defaults.
 6. **Prepare.** When the reference has a *Prepare* section, run it.
 7. **Traces.** Ask `otlp_endpoint` (optional, empty to skip). On `aca`, warn
    when it names `localhost` or a private address.

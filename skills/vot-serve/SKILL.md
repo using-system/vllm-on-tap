@@ -24,5 +24,6 @@ description: Serve a vLLM preset on the current vllm-on-tap environment - resolv
 6. **Wait.** Run the reference's *Ready when*. On timeout, show the log
    lines it names and leave the unit for the user to inspect or destroy.
 7. **Report.** Print the base URL, the served name, and the vllm-guide
-   skill's *OpenAI API* `curl` filled in (with the Authorization header on
-   `aca`); on `aca`, repeat that billing runs until `/vot-destroy <preset>`.
+   skill's *OpenAI API* `curl` filled in (on `aca`, with the reference's
+   `<auth header>`, which fetches the key from the app - never print the
+   key); on `aca`, repeat that billing runs until `/vot-destroy <preset>`.

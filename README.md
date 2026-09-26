@@ -62,8 +62,9 @@ there.
 On `aca`, the Container App bills for as long as it exists - there is no
 scale-to-zero, so `/vot-destroy` is how the billing stops. Its ingress is
 public but restricted to the serving machine's public IP, and requests
-must carry the API key from the environment variable it names (default
-`VOT_API_KEY`).
+must carry an API key that `/vot-serve` generates and stores as the app's
+secret - nothing to export beforehand; the `curl` it prints reads the key
+back with `az`.
 
 ## License
 
