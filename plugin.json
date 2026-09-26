@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vllm-on-tap",
+  "version": "0.1.0",
+  "description": "Serve vLLM presets on demand - locally, on Apple Silicon, in Docker or on Azure Container Apps serverless GPUs - with their traces exported over OTLP, and tear them down again.",
+  "author": {"name": "using-system", "url": "https://github.com/using-system"},
+  "homepage": "https://github.com/using-system/vllm-on-tap#readme",
+  "repository": "https://github.com/using-system/vllm-on-tap",
+  "license": "MIT",
+  "keywords": ["vllm", "inference", "llm", "azure-container-apps", "gpu", "opentelemetry"]
+}

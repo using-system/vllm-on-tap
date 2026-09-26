@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Test the repository checks
+        run: cd ci && uv run --no-project --with pytest --with pyyaml pytest -q
+      - name: plugin.json against the Agent Plugins 1.0.0 schema
+        run: uvx check-jsonschema --schemafile https://agent-plugins.org/schemas/1.0.0/plugin.schema.json plugin.json
+      - name: Presets against presets/schema.json
+        run: |
+          shopt -s nullglob
+          files=(presets/*.yaml)
+          [ ${#files[@]} -eq 0 ] || uvx check-jsonschema --schemafile presets/schema.json "${files[@]}"
+      - name: Skills and preset names
+        run: uv run --no-project --with pyyaml python ci/check_repo.py .
