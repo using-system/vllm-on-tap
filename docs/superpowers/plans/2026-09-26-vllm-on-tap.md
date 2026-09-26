@@ -556,9 +556,10 @@ endpoint (port 4318 or a `/v1/traces` path) also set
 ending in `/v1/traces`, appending that path when the environment's value
 lacks it (vllm-guide's *Traces over OTLP*).
 
-Preset environment (every type): each name in the preset's `env` must be set
-in the user's shell - refuse naming the missing one - and is passed to vLLM
-by name, never by value in a file.
+Preset environment (every type): each name in the preset's `env` must be
+exported in the user's shell (`printenv <NAME>` prints a value) - refuse
+naming the missing one - and is passed to vLLM by name, never by value in a
+file or on a command line.
 ````
 
 - [ ] **Step 2: Write `skills/stack-guide/references/local-vllm.md`**
@@ -587,7 +588,8 @@ None.
 
 1. Already served: `test -f .vot/run/vot-<preset>.pid && kill -0 "$(cat .vot/run/vot-<preset>.pid)"` succeeds -> unit exists.
 2. Port taken: `lsof -iTCP:<port> -sTCP:LISTEN` prints a line -> refuse, naming the port.
-3. Start:
+
+Start:
 
 ```bash
 mkdir -p .vot/run
@@ -688,7 +690,8 @@ None.
 
 1. Already served: `docker ps -a --filter name=^vot-<preset>$ --format '{{.Names}}'` prints a name -> unit exists.
 2. Port taken: `lsof -iTCP:<port> -sTCP:LISTEN` prints a line -> refuse, naming the port.
-3. Start (the image's entrypoint is `vllm serve`, so the arguments start with the model):
+
+Start (the image's entrypoint is `vllm serve`, so the arguments start with the model):
 
 ```bash
 docker run -d --name vot-<preset> --gpus all --ipc=host \
@@ -793,26 +796,27 @@ the environment anyway.
 
 Checks, in this order, stopping at the first refusal:
 
-1. `<api_key_env>` unset in the shell -> refuse before any Azure call, naming the variable.
+1. `printenv <api_key_env>` prints nothing (unset, or set but not exported) -> refuse before any Azure call, naming the variable and asking for `export <api_key_env>=...`. The same holds for `HF_TOKEN` when the preset lists it.
 2. Profile from `gpu_memory_gb`: <= 16 -> `gpu-t4` (cpu `8`, memory `56Gi`); <= 80 -> `gpu-a100` (cpu `24`, memory `220Gi`); > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
 
 Create. `az containerapp create --args` cannot carry vLLM's `--flags` (az
 parses them as its own), so the app is created from a YAML spec, built with
-`jq` and streamed through process substitution: the secrets' values come
-from the shell and never touch the disk.
+`jq` and streamed through process substitution. jq reads the secrets'
+values from its environment (`env[...]`), never from its arguments, so they
+appear in no file and in no process's command line.
 
 ```bash
 ENV_ID="$(az containerapp env show --name <environment> --resource-group <resource_group> --query id -o tsv)"
 CALLER_IP="$(curl -fsS https://api.ipify.org)"
 ARGS='["<model>","--served-model-name","<served name>","--port","8000", <vllm args as JSON strings>]'
 ENVS='[{"name":"VLLM_API_KEY","secretRef":"vllm-api-key"}]'   # + {"name":"HF_TOKEN","secretRef":"hf-token"}, {"name":"OTEL_SERVICE_NAME","value":"vot-<preset>"}, {"name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","value":"http/protobuf"} when they apply
-SECRETS="$(jq -n --arg k "${<api_key_env>}" '[{name:"vllm-api-key",value:$k}]')"   # + {name:"hf-token",value:$ENV.HF_TOKEN} when the preset lists HF_TOKEN
 az containerapp create --name vot-<preset> --resource-group <resource_group> --yaml <(jq -n \
   --arg loc "<location>" --arg env "$ENV_ID" --arg wp "<profile>" --arg img "<image>" \
   --arg ip "$CALLER_IP/32" --argjson cpu <cpu> --arg mem "<memory>" \
-  --argjson args "$ARGS" --argjson envs "$ENVS" --argjson secrets "$SECRETS" '{
+  --argjson args "$ARGS" --argjson envs "$ENVS" \
+  --arg keyvar "<api_key_env>" --argjson hf <true when the preset lists HF_TOKEN, else false> '{
     location: $loc,
     properties: {
       environmentId: $env,
@@ -821,7 +825,8 @@ az containerapp create --name vot-<preset> --resource-group <resource_group> --y
         activeRevisionsMode: "Single",
         ingress: {external: true, targetPort: 8000, transport: "auto",
           ipSecurityRestrictions: [{name: "caller", ipAddressRange: $ip, action: "Allow"}]},
-        secrets: $secrets
+        secrets: ([{name: "vllm-api-key", value: env[$keyvar]}]
+          + (if $hf then [{name: "hf-token", value: env.HF_TOKEN}] else [] end))
       },
       template: {
         containers: [{name: "vllm", image: $img, args: $args, env: $envs,
@@ -859,7 +864,7 @@ everything and is the user's call, never a destroy's.
 - GPU workload profiles get no default health probes, so a long model load is not restarted.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
 - The platform driver sets the CUDA ceiling (driver 570 -> CUDA 12.x, 580 -> 13.x): an image built for a newer CUDA fails at start - check the log's CUDA error first.
-- The secret values expand from the shell into the process substitution; they never go into a file or a command line.
+- jq reads the secret values from the environment (`env[...]`), so they never go into a file or a command line; never move them to `--arg`/`--argjson`, which `ps` shows.
 - The API key covers `/v1`, `/v2`, `/inference`, `/cohere` only; `/invocations`, `/tokenize`, `/pause`, `/abort_requests`, `/update_weights` are protected by the ingress IP restriction alone - never remove it.
 - The caller's IP changes (another network, a VPN): update the rule with `az containerapp ingress access-restriction set --name vot-<preset> --resource-group <resource_group> --rule-name caller --ip-address <new ip>/32 --action Allow`.
 - An `otlp_endpoint` on `localhost` or a private address is unreachable from the app.
