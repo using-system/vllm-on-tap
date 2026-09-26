@@ -3,5 +3,3 @@ stack: azure
 config:
   location: swedencentral
   resource_group: rg-vot
-  environment: vot-env
-  storage: votcache7b4a25
