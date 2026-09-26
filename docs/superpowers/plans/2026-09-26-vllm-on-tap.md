@@ -1061,6 +1061,54 @@ Before the PR: a fresh reviewer sub-agent (most capable model) reviews the whole
 
 ---
 
+### Task 7b: The maintainer's `/publish` command
+
+**Files:**
+- Create: `.claude/commands/publish.md`
+
+**Interfaces:**
+- Consumes: `.github/workflows/release.yml` (Task 7) - the pipeline it triggers and watches.
+
+A Claude Code project command for the repository's maintainer, adapted
+from oddyssey's `/oddyssey-publish` (NOT a plugin skill - it lives under
+`.claude/commands/`, never under `skills/`, so `ci/check_repo.py` does not
+see it). It cuts a release: pushing the `vX.Y.Z` tag starts
+`.github/workflows/release.yml`, which bumps `plugin.json` and
+`CHANGELOG.md` through an auto-merged release PR, re-points the tag at
+the merge commit and creates the GitHub release. Same preflight as
+oddyssey's (fetch tags, clean `main` in sync with `origin/main`, latest
+`v*` tag or first release from `v0.0.0`, latest release run checked for a
+FAILED state with the same recovery guidance - fix main, "Re-run all
+jobs", or delete and re-push the tag); no WAITING/pypi branch, since this
+pipeline has no environment gate. Same bump logic (feat -> minor, else
+patch, major never derived) and the same confirm-before-firing step.
+Watches the run to completion instead of to an approval gate, and on
+success verifies the GitHub release exists with notes and that
+`plugin.json` on `main` reads the new version. Drops oddyssey's PyPI
+step and its issue-labelling step - neither applies here. States once
+that the first release is `0.1.0` and the plugin stays in `0.x` until
+`local-vllm-metal` and `aca` are verified live (spec section 11).
+
+- [ ] **Step 1: Write `.claude/commands/publish.md`** adapting
+  `~/Repos/github/oddyssey/.claude/commands/oddyssey-publish.md`, keeping
+  its structure, frontmatter shape (`description:` only) and
+  `$ARGUMENTS` handling, with the differences above.
+
+- [ ] **Step 2: Check**
+
+Run: `uv run --no-project --with pyyaml python ci/check_repo.py .`
+Expected: no output, exit 0 (the command lives outside `skills/`, so it
+must not affect the check).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .claude/commands/publish.md
+git commit -m "chore(release): the /publish maintainer command"
+```
+
+---
+
 ### Task 8: Live acceptance on `local-vllm-metal`
 
 **Files:**
@@ -1106,5 +1154,5 @@ git commit -m "fix(stack-guide): aca verified live"
 
 - [ ] **Step 1:** Dispatch a fresh reviewer sub-agent (most capable model) over `fix/live-acceptance` against `main`, with the spec as the requirement; fix its findings; the same reviewer re-checks until it returns none.
 - [ ] **Step 2:** Push; the PR body lists the live results of Tasks 8–9 and the review outcome. Merge only on the maintainer's go.
-- [ ] **Step 3:** On the maintainer's request only: `git tag v0.1.0 && git push origin v0.1.0`; watch `release.yml` open, merge and tag the release PR; confirm `plugin.json` on `main` reads `0.1.0` and the GitHub release exists.
+- [ ] **Step 3:** On the maintainer's request only: run `/publish` (choose `0.1.0`); it opens, merges and tags the release PR, and confirms `plugin.json` on `main` reads `0.1.0` and the GitHub release exists.
 - [ ] **Step 4:** On the maintainer's go, submit `https://github.com/using-system/vllm-on-tap/blob/main/plugin.json` to otelyssey through its plugin submission issue (spec section 12); admission is the reviewer's call.
