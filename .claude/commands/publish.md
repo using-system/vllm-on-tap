@@ -51,10 +51,13 @@ Steps:
 
 4. **Confirm before firing**: show verbatim the two commands about to
    run -
-   `git tag vX.Y.Z` and `git push origin vX.Y.Z` -
+   `git tag --no-sign vX.Y.Z` and `git push origin vX.Y.Z` -
    and state plainly that the push starts the whole release pipeline
    (release PR, CI, auto-merge, tag re-point, GitHub release). Only on
-   explicit confirmation, run both commands.
+   explicit confirmation, run both commands. `--no-sign` keeps the tag
+   lightweight, like the one the workflow re-points it to, even when
+   the local git config sets `tag.gpgsign` - that setting would
+   otherwise demand a tag message and fail the `git tag`.
 
 5. **Watch the run to completion**: name the tag pushed and the
    release run, then poll `gh run view <run-id> --json status,conclusion`

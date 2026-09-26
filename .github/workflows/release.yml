@@ -3,7 +3,7 @@ run-name: "release: ${{ github.ref_name }}"
 
 on:
   # One trigger, one act: pushing a version tag IS the release order.
-  #   git tag v0.2.0 && git push origin v0.2.0
+  #   git tag --no-sign v0.2.0 && git push origin v0.2.0
   # The workflow then: computes the bump for exactly that version, opens
   # the release PR with the oddyssey-release App (so pull_request CI runs
   # on it), waits for those checks, squash-merges it, re-points the tag at
@@ -254,7 +254,7 @@ jobs:
             BUILD_OID="$(git rev-parse "refs/tags/${REF_NAME}^{commit}")"
             TAG_VERSION="$(git show "${BUILD_OID}:plugin.json" | jq -r .version)"
             if [ "v${TAG_VERSION}" != "${REF_NAME}" ]; then
-              echo "::error::tag ${REF_NAME} points at a tree carrying version ${TAG_VERSION} - a previous run likely merged but died before re-pointing the tag. Recover with: git tag -f ${REF_NAME} <merge-oid> && git push --force origin ${REF_NAME}, then re-run this workflow."
+              echo "::error::tag ${REF_NAME} points at a tree carrying version ${TAG_VERSION} - a previous run likely merged but died before re-pointing the tag. Recover with: git tag --no-sign -f ${REF_NAME} <merge-oid> && git push --force origin ${REF_NAME}, then re-run this workflow."
               exit 1
             fi
           fi
