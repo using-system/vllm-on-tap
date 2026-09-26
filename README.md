@@ -52,12 +52,6 @@ Planned, not supported in this version yet:
 - `gcp` - a Google Cloud Run service with a GPU, with a Cloud Storage
   volume as the cache.
 
-`local-vllm-metal` (vllm-metal 0.30.0) and `azure` (serverless A100) are
-verified live: configure, serve, a chat request answered, destroy.
-`local-vllm` and `local-vllm-docker` are not yet; they also need a Linux
-machine with an NVIDIA GPU. An environment configured with `aca`, the
-earlier name of `azure`, keeps working.
-
 ## Presets
 
 A preset names a model and its `vllm serve` flags, not where it runs. The
