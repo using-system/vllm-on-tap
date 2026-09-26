@@ -1,3 +1,8 @@
+## [0.2.1] - 2026-09-26
+
+### 🚀 Features
+
+- *(azure)* Discover the environment and the storage in the resource group (#28)
 ## [0.2.0] - 2026-09-26
 
 ### 🚀 Features
