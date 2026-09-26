@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in vllm-on-tap misbehaves - a command, a stack, a preset
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. State what you **confirmed** with a command and its output vs what you only **observed** once. Never paste an API key, a token or a real subscription identifier - replace them with a placeholder.
+  - type: input
+    id: version
+    attributes:
+      label: vllm-on-tap version
+      description: Release version or git commit
+      placeholder: "e.g. 0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: stack
+    attributes:
+      label: Stack
+      options:
+        - aca
+        - local-vllm-metal
+        - local-vllm
+        - local-vllm-docker
+        - not stack-specific
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, the coding agent (claude / copilot / codex / ...), vLLM or vllm-metal version, the preset
+      placeholder: "macOS 26, claude, vllm-metal 0.30.0, gemma4-e4b-qat"
+    validations:
+      required: true
+  - type: dropdown
+    id: confidence
+    attributes:
+      label: Status
+      options:
+        - "confirmed - reproduced with a command and its output"
+        - "observed - seen once, not yet isolated"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+      description: Include the commands and their real output (vLLM or container logs where relevant).
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Suggested fix, workaround you used, related issues.
