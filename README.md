@@ -26,6 +26,7 @@ Copilot CLI, Codex CLI...).
   where, how to reach it).
 - `/vot-serve <preset>` - serve a preset on the current environment.
 - `/vot-destroy <preset>` - tear it down again.
+- `/vot-instrument-preset <request>` - create or edit a custom preset.
 
 ## Stacks
 
