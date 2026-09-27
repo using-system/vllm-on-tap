@@ -28,7 +28,7 @@ Start:
 
 ```bash
 mkdir -p .vot/run
-[OTEL_SERVICE_NAME=vot-<preset>] [OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf] \
+[OTEL_SERVICE_NAME=vot-<preset> OTEL_RESOURCE_ATTRIBUTES='<resource attributes>'] [OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf] \
 nohup vllm serve <model> --host 127.0.0.1 --port <port> --served-model-name <served name> <vllm args> \
   > .vot/run/vot-<preset>.log 2>&1 &
 echo $! > .vot/run/vot-<preset>.pid
