@@ -158,8 +158,8 @@ to `vot-appi`. vLLM exports traces only, so only a traces pipeline runs.
 
 `true`: first `az extension show --name application-insights` succeeds -
 otherwise offer `az extension add --name application-insights --upgrade`,
-run on the user's yes (on a no, write `telemetry_enabled: false` and
-stop). Then create whichever is missing, in this order; an existing one
+run on the user's yes (on a no, go on as `false`, which needs no
+extension). Then create whichever is missing, in this order; an existing one
 is reused as it is. Say what it costs first: Log Analytics bills the GB
 ingested (the traces of a few serves stay within cents), and the collector
 runs on the Consumption profile with 0.25 vCPU and 0.5 Gi, always on, a
@@ -231,9 +231,11 @@ collector by its name, and nothing outside the environment does.
 
 `false`: delete whichever exists, the collector first, and say what was
 deleted. When the collector exists, list the served apps first
-(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`):
-each one keeps exporting to the deleted collector, so its traces are lost
-until it is served again - say so and delete only on the user's yes.
+(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`).
+When it lists any, each one keeps exporting to the deleted collector, so
+its traces are lost until it is served again: say so and delete only on
+the user's yes. A no keeps `telemetry_enabled: true` and the collector's
+`otlp_endpoint`, and leaves all three resources.
 `az resource` needs no extension:
 
 ```bash
@@ -247,7 +249,7 @@ az monitor log-analytics workspace show --workspace-name vot-logs --resource-gro
 az monitor log-analytics workspace delete --workspace-name vot-logs --resource-group <resource_group> --yes
 
 az resource list --resource-group <resource_group> --resource-type microsoft.alertsmanagement/smartDetectorAlertRules --query "[?name=='Failure Anomalies - vot-appi'].id" -o tsv
-az resource delete --ids <id>
+az resource delete --ids "<id>"   # the id holds spaces: keep the quotes
 ```
 
 The last pair removes the smart-detection rule Azure may add with
@@ -390,7 +392,7 @@ destroy's.
 - An internal environment has no IP rule on the app (its callers come from private addresses): the ingress is reachable from the whole VNet, the API key still guards `/v1` - the routes it leaves open are reachable from the VNet too.
 - An internal environment's FQDN resolves only through a private DNS zone for the environment's default domain, pointing to its static IP, which the user creates on their VNet; without it even a caller inside the VNet gets no answer.
 - A storage account with network rules or private endpoints only must let the environment's subnet reach it, or the `vot-cache` mount fails at start and the revision never runs.
-- An environment on a VNet needs outbound access to the image registry (Docker Hub), to `huggingface.co` and, with `telemetry_enabled`, to the Application Insights ingestion endpoint (`*.in.applicationinsights.azure.com`); a route table or firewall that blocks it stops the pull or the weights download.
+- An environment on a VNet needs outbound access to the image registry (Docker Hub), to `huggingface.co` and, with `telemetry_enabled`, to the Application Insights ingestion endpoint (`*.in.applicationinsights.azure.com`); a route table or firewall that blocks it stops the pull or the weights download, or drops the collector's spans silently.
 - A storage account name is global: the generated name is checked with `check-name` before a create, and generated again when taken.
 - Another StorageV2 account with large file shares, or a second Container Apps environment, in `<resource_group>` makes *Prepare* and *Serve* refuse (*Destroy* still runs): move it out, or use a resource group dedicated to vllm-on-tap.
 - `mountOptions` on the `vot-cache` volume accepts `mfsymlinks,nobrl`; `actimeo` is refused (`ContainerAppVolumeMountOptionsNotSupported`).
