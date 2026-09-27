@@ -34,15 +34,9 @@ An environment targets one stack:
 - `local-vllm` - a background `vllm serve` process on this machine.
 - `local-vllm-metal` - the same, through vLLM's Apple Silicon (MLX) build.
 - `local-vllm-docker` - a `vllm/vllm-openai` container on this machine.
-- `azure` - an Azure Container Apps environment in which each serve
-  provisions a Container App with a serverless GPU, on demand, and each
-  destroy removes it. An optional storage account caches the Hugging Face
-  model weights and vLLM's compiled graphs, so a preset's later serves
-  start faster. An `azure` environment names a region and a resource
-  group: vllm-on-tap creates what is missing in it, or discovers the
-  Container Apps environment and the storage you created there yourself,
-  with your own network rules (a VNet, private endpoints...) - an
-  internal environment serves the model to its VNet only.
+- `azure` - a serverless GPU Container App per serve, in a resource group
+  where vllm-on-tap creates or discovers the Container Apps environment and
+  an optional storage that caches the model weights.
 
 Planned, not supported in this version yet:
 
