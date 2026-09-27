@@ -7,9 +7,9 @@ description: Serve a vLLM preset on the current vllm-on-tap environment - resolv
 
 1. **Environment.** Read `.vot/config.yaml` and
    `.vot/environments/<current>.yaml`. None: tell the user to run
-   `/vot-config` and stop. A `stack: aca` is the earlier name of `azure`:
-   use `azure`. A planned stack type (`kubernetes`, `aws`, `gcp`): say it
-   is not supported in this version, and stop.
+   `/vot-config` and stop. Resolve the stack type per the stack-guide skill
+   (an earlier name is read as the current one); a planned type: say it is
+   not supported in this version, and stop.
 2. **Preset.** No preset given: list the available presets per the
    load-preset skill's *Resolve* and stop. Otherwise resolve, validate and
    merge it per load-preset's *Resolve*, *Validate* and *Merge*, for the
@@ -22,10 +22,12 @@ description: Serve a vLLM preset on the current vllm-on-tap environment - resolv
    `/vot-destroy <preset>`'s steps and continue) or stop. Never start a
    second unit.
 5. **Start.** Run the reference's *Serve* start command, with tracing per
-   stack-guide when the environment has `otlp_endpoint`.
+   stack-guide when the environment has `otlp_endpoint` (or when the
+   reference's checks resolved one).
 6. **Wait.** Run the reference's *Ready when*. On timeout, show the log
    lines it names and leave the unit for the user to inspect or destroy.
 7. **Report.** Print the base URL, the served name, and the vllm-guide
-   skill's *OpenAI API* `curl` filled in (on `azure`, with the reference's
-   `<auth header>`, which fetches the key from the app - never print the
-   key); on `azure`, repeat that billing runs until `/vot-destroy <preset>`.
+   skill's *OpenAI API* `curl` filled in (with the reference's
+   `<auth header>` when it has an *API key* section - never print the
+   key), and what the reference's *Serve* says to tell the user once the
+   unit runs.

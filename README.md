@@ -36,8 +36,9 @@ An environment targets one stack:
 - `local-vllm-metal` - the same, through vLLM's Apple Silicon (MLX) build.
 - `local-vllm-docker` - a `vllm/vllm-openai` container on this machine.
 - `azure` - a serverless GPU Container App per serve, in a resource group
-  where vllm-on-tap creates or discovers the Container Apps environment and
-  an optional storage that caches the model weights.
+  where vllm-on-tap creates or discovers the Container Apps environment, an
+  optional storage that caches the model weights, and an optional
+  OpenTelemetry Collector that sends the traces to Application Insights.
 
 Planned, not supported in this version yet:
 

@@ -3,3 +3,4 @@ stack: azure
 config:
   location: swedencentral
   resource_group: rg-vot
+  telemetry_enabled: true

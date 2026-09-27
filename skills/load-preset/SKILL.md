@@ -22,7 +22,7 @@ The contract is `presets/schema.json` in the official repository
 | `gpu_memory_gb` | no | the smallest GPU memory the preset runs on |
 | `vllm_args` | no | flags passed as-is to `vllm serve`, one per key (`--flag: value`); `true` is a bare flag, `false` omits it |
 | `env` | no | names of environment variables the preset needs (`HF_TOKEN` for a gated model) |
-| `stacks.<stack type>` | no | overrides of `model`, `vllm_args` (merged key by key) and `gpu_memory_gb` for one stack type (`stacks.aca`, the earlier name, is read as `stacks.azure`) |
+| `stacks.<stack type>` | no | overrides of `model`, `vllm_args` (merged key by key) and `gpu_memory_gb` for one stack type (the override under a stack type's earlier name, per the stack-guide skill, is read as its current name's) |
 
 ## Resolve
 
@@ -50,8 +50,9 @@ Also refuse a `name` that differs from the file name.
 
 ## Merge
 
-On `azure`, the override is `stacks.azure`, or `stacks.aca` (its earlier
-name) when `stacks.azure` is absent. After validation, when the preset has
+The override of a stack type with an earlier name (the stack-guide
+skill) is `stacks.<current name>`, or `stacks.<earlier name>` when it is
+absent. After validation, when the preset has
 `stacks.<current stack type>`: its
 `model` and `gpu_memory_gb` replace the preset's; its `vllm_args` are merged
 key by key into the preset's (the override wins). `served_model_name`

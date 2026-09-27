@@ -3,7 +3,8 @@
 A Container Apps environment in which each serve provisions a Container
 App with a serverless GPU, on demand, and removes it on destroy; an
 optional storage account caches the model weights and vLLM's compiled
-graphs across serves.
+graphs across serves, and an optional Application Insights receives
+vLLM's traces through an OpenTelemetry Collector in the environment.
 
 ## Prerequisites and install
 
@@ -20,6 +21,12 @@ graphs across serves.
 - `location` - a region with serverless A100 GPUs: `australiaeast`, `brazilsouth`, `canadacentral`, `eastus`, `italynorth`, `swedencentral`, `westus`, `westus3`. When `<environment>` resolves, its region wins: *Prepare* reads it (`az containerapp env show --name <environment> --resource-group <resource_group> --query location -o tsv`, lowercased without spaces) and writes it as `location`, and refuses when it is not one of these regions (in `/vot-config`, ask for another `resource_group`).
 - `resource_group` - default `rg-vot`; dedicated to vllm-on-tap.
 - `image` - optional; default `vllm/vllm-openai:v0.30.0`.
+- `telemetry_enabled` - `true` or `false`, default `false`. `true`: *Prepare*
+  makes sure the telemetry resources exist (see *Telemetry*), and *Serve*
+  exports the traces to the collector: the config gives the traces
+  endpoint, so `/vot-config` neither asks nor writes `otlp_endpoint`, and
+  drops one present. `false`: *Prepare* offers to delete them when
+  present.
 
 `environment`, `storage` and `api_key_env` fields from an earlier version
 are ignored, and dropped on the next write.
@@ -88,7 +95,7 @@ az containerapp env workload-profile add --name <environment> --resource-group <
 A profile `add` refused for quota: tell the user to request "Managed
 Environment Consumption NCA100 GPUs" on the environment's Quota page
 (https://learn.microsoft.com/azure/container-apps/quota-requests), and save
-the environment anyway.
+the environment anyway, then continue with the storage and *Telemetry*.
 
 Then the optional storage - not required, an environment serves
 without it. `<storage>` resolved: reuse it, and make sure its share and
@@ -140,6 +147,127 @@ az rest --method put --url "https://management.azure.com${ENV_ID}/storages/vot-c
 All the lines above run in one shell command: split across calls, `SA_KEY`
 is lost and the storage would register without a key.
 
+### Telemetry
+
+Driven by `telemetry_enabled` alone, every run of *Prepare*, with fixed
+names in `<resource_group>`: a Log Analytics workspace `vot-logs`, a
+workspace-based Application Insights `vot-appi` on it, and a Container App
+`otel-collector` in `<environment>` - an OpenTelemetry Collector that
+receives OTLP/HTTP from the apps of the environment and exports the traces
+to `vot-appi`. vLLM exports traces only, so only a traces pipeline runs.
+
+`true`: first `az extension show --name application-insights` succeeds -
+otherwise offer `az extension add --name application-insights --upgrade`,
+run on the user's yes (on a no, go on as `false`, which needs no
+extension). Then create whichever is missing, in this order; an existing one
+is reused as it is - except the collector when `vot-appi` was created in
+this run: its secret holds the old connection string, so delete it and
+create it again. Say what it costs first: Log Analytics bills the GB
+ingested (the traces of a few serves stay within cents), and the collector
+runs on the Consumption profile with 0.25 vCPU and 0.5 Gi, always on, a
+few USD a month while idle.
+
+```bash
+az monitor log-analytics workspace show --workspace-name vot-logs --resource-group <resource_group>
+az monitor log-analytics workspace create --workspace-name vot-logs --resource-group <resource_group> --location <location> --retention-time 30
+
+az monitor app-insights component show --app vot-appi --resource-group <resource_group>
+az monitor app-insights component create --app vot-appi --resource-group <resource_group> --location <location> --kind web --application-type web \
+  --workspace "$(az monitor log-analytics workspace show --workspace-name vot-logs --resource-group <resource_group> --query id -o tsv)"
+
+az containerapp show --name otel-collector --resource-group <resource_group>
+```
+
+The collector is created like a serve's app, from a `jq` spec: image
+`otel/opentelemetry-collector-contrib:0.161.0`, its configuration in the
+environment variable `OTELCOL_CONFIG` (read with `--config=env:`), and the
+Application Insights connection string as the app secret
+`appinsights-connection-string`, exported to jq only and read from its
+environment, like the API key:
+
+```bash
+ENV_ID="$(az containerapp env show --name <environment> --resource-group <resource_group> --query id -o tsv)"
+APPI_CS="$(az monitor app-insights component show --app vot-appi --resource-group <resource_group> --query connectionString -o tsv)"
+[ -n "$APPI_CS" ] || { echo "no application insights connection string" >&2; exit 1; }
+export APPI_CS
+OTELCOL_CONFIG='receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  azure_monitor:
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [azure_monitor]'
+az containerapp create --name otel-collector --resource-group <resource_group> --yaml <(jq -n \
+  --arg loc "<location>" --arg env "$ENV_ID" --arg cfg "$OTELCOL_CONFIG" \
+  --arg img "otel/opentelemetry-collector-contrib:0.161.0" '{
+    location: $loc,
+    properties: {
+      environmentId: $env,
+      workloadProfileName: "Consumption",
+      configuration: {
+        activeRevisionsMode: "Single",
+        ingress: {external: false, targetPort: 4318, transport: "http", allowInsecure: true},
+        secrets: [{name: "appinsights-connection-string", value: env.APPI_CS}]
+      },
+      template: {
+        containers: [{name: "otel-collector", image: $img,
+          args: ["--config=env:OTELCOL_CONFIG"],
+          env: [{name: "OTELCOL_CONFIG", value: $cfg},
+            {name: "APPLICATIONINSIGHTS_CONNECTION_STRING", secretRef: "appinsights-connection-string"}],
+          resources: {cpu: 0.25, memory: "0.5Gi"}}],
+        scale: {minReplicas: 1, maxReplicas: 1}
+      }
+    }
+  }')
+```
+
+All the lines above run in one shell command, so the connection string
+dies with it. The traces go to `http://<collector fqdn>/v1/traces`,
+where `<collector fqdn>` is what
+`az containerapp show --name otel-collector --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv`
+prints (`otel-collector.internal.<environment default domain>`): the apps
+of the environment reach it, and nothing outside the environment does.
+*Serve* resolves it at every serve; the environment stores no
+`otlp_endpoint`, so no live domain lands in a committed file and a
+recreated environment never leaves a stale endpoint.
+
+`false`: never delete silently - the names are fixed, but a resource
+under one of them may be the user's, not vllm-on-tap's. Check which of
+the four exist (the `show` and `list` commands below, the smart-detection
+rule included); none: nothing to do. Otherwise list them, with the served
+apps (`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`),
+which keep exporting to a deleted collector and lose their traces until
+served again, and ask the user's permission for each one before deleting
+it, following the dependencies - the collector needs `vot-appi`, which
+needs `vot-logs`: deleting `vot-logs` deletes `vot-appi` and the
+collector too, and deleting `vot-appi` deletes the collector, so keeping
+the collector keeps all three (the user may still drop the collector
+alone and keep the workspace). Delete the ones allowed, the collector
+first, and say what was deleted and what was kept. A kept collector
+keeps `telemetry_enabled: true`; otherwise it is written `false`. `az resource` needs no extension:
+
+```bash
+az containerapp show --name otel-collector --resource-group <resource_group>
+az containerapp delete --name otel-collector --resource-group <resource_group> --yes
+
+az resource show --name vot-appi --resource-group <resource_group> --resource-type Microsoft.Insights/components
+az resource delete --name vot-appi --resource-group <resource_group> --resource-type Microsoft.Insights/components
+
+az monitor log-analytics workspace show --workspace-name vot-logs --resource-group <resource_group>
+az monitor log-analytics workspace delete --workspace-name vot-logs --resource-group <resource_group> --yes
+
+az resource list --resource-group <resource_group> --resource-type microsoft.alertsmanagement/smartDetectorAlertRules --query "[?name=='Failure Anomalies - vot-appi'].id" -o tsv
+az resource delete --ids "<id>"   # the id holds spaces: keep the quotes
+```
+
+The last pair removes the smart-detection rule Azure adds with
+`vot-appi`, a few minutes after its create.
+
 ## Serve
 
 Checks, in this order, stopping at the first refusal (`<environment>` and
@@ -149,8 +277,9 @@ Checks, in this order, stopping at the first refusal (`<environment>` and
 2. Profile: always `gpu-a100` (cpu `24`, memory `220Gi`, one A100 80 GB); a preset with `gpu_memory_gb` > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. `<storage>` resolved: `az containerapp env storage show --name <environment> --resource-group <resource_group> --storage-name vot-cache` fails -> refuse and route to `/vot-config`.
-5. Internal environment (see *Prepare*): `<internal>` is `true`, otherwise `false`.
-6. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
+5. `telemetry_enabled` is `true`: `<collector fqdn>` (see *Telemetry*) prints nothing -> refuse and route to `/vot-config`; otherwise `http://<collector fqdn>/v1/traces` is the `otlp_endpoint` of stack-guide's tracing rule for this serve.
+6. Internal environment (see *Prepare*): `<internal>` is `true`, otherwise `false`.
+7. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
 
 Create. `az containerapp create --args` cannot carry vLLM's `--flags` (az
 parses them as its own), so the app is created from a YAML spec, built with
@@ -253,13 +382,14 @@ Fails: report that the unit does not exist, stop. Succeeds:
 az containerapp delete --name vot-<preset> --resource-group <resource_group> --yes
 ```
 
-The environment, its GPU profiles and the storage account stay (the
-caches with it); `az group delete --name <resource_group>` removes
-everything and is the user's call, never a destroy's.
+The environment, its GPU profiles, the storage account (the caches
+with it) and the telemetry resources stay; `az group delete --name
+<resource_group>` removes everything and is the user's call, never a
+destroy's.
 
 ## Traps
 
-- The create spec must carry `ingress.allowInsecure: false`: without it `az containerapp create --yaml` fails with `400 ... could not be converted to System.Boolean. Path: $` (verified with containerapp 1.2.0b5 to 1.3.0b5).
+- A create spec must carry `ingress.allowInsecure` explicitly - `false` for `vot-<preset>`, `true` for `otel-collector` (see below): without it `az containerapp create --yaml` fails with `400 ... could not be converted to System.Boolean. Path: $` (verified with containerapp 1.2.0b5 to 1.3.0b5).
 - `--logs-destination none` keeps the environment from creating a billed Log Analytics workspace; `az containerapp logs show` streams console and system logs without it.
 - GPU workload profiles get no default health probes, so a long model load is not restarted.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
@@ -275,7 +405,12 @@ everything and is the user's call, never a destroy's.
 - An internal environment has no IP rule on the app (its callers come from private addresses): the ingress is reachable from the whole VNet, the API key still guards `/v1` - the routes it leaves open are reachable from the VNet too.
 - An internal environment's FQDN resolves only through a private DNS zone for the environment's default domain, pointing to its static IP, which the user creates on their VNet; without it even a caller inside the VNet gets no answer.
 - A storage account with network rules or private endpoints only must let the environment's subnet reach it, or the `vot-cache` mount fails at start and the revision never runs.
-- An environment on a VNet needs outbound access to the image registry (Docker Hub) and to `huggingface.co`; a route table or firewall that blocks it stops the pull or the weights download.
+- An environment on a VNet needs outbound access to the image registry (Docker Hub), to `huggingface.co` and, with `telemetry_enabled`, to the Application Insights ingestion endpoint (`*.in.applicationinsights.azure.com`); a route table or firewall that blocks it stops the pull or the weights download, or drops the collector's spans silently.
 - A storage account name is global: the generated name is checked with `check-name` before a create, and generated again when taken.
 - Another StorageV2 account with large file shares, or a second Container Apps environment, in `<resource_group>` makes *Prepare* and *Serve* refuse (*Destroy* still runs): move it out, or use a resource group dedicated to vllm-on-tap.
 - `mountOptions` on the `vot-cache` volume accepts `mfsymlinks,nobrl`; `actimeo` is refused (`ContainerAppVolumeMountOptionsNotSupported`).
+- The collector's ingress is internal with `allowInsecure: true`, so the apps post plain HTTP to `http://<collector fqdn>`; with `allowInsecure: false` the ingress redirects the POST to HTTPS and the spans are lost.
+- The collector exporter's type is `azure_monitor`; `azuremonitor` is its deprecated name. It reads the connection string from `APPLICATIONINSIGHTS_CONNECTION_STRING`, so the configuration holds no secret.
+- A Log Analytics workspace delete is a soft delete for 14 days: creating `vot-logs` again in the same resource group within that time recovers it, data included.
+- An existing collector is reused as it is, never updated: to move it to another image, delete `otel-collector` alone (`az containerapp delete`) and run `/vot-config` again; the workspace and its data stay.
+- The bare app name `otel-collector` does not resolve from another app (`NameResolutionError`, the spans are lost): the endpoint is the internal FQDN.

@@ -17,7 +17,7 @@ Documentation root: https://docs.vllm.ai/en/latest/
 - `--max-model-len <tokens>` - context length; lower it when the KV cache does not fit.
 - `--gpu-memory-utilization <0..1>` - share of GPU memory vLLM takes (default 0.9).
 - `--dtype float16|bfloat16|auto` - `auto` follows the checkpoint; a GPU without bf16 falls back to fp16.
-- `--tensor-parallel-size <n>` - split over n GPUs; on `azure` (Container Apps serverless) there is one GPU per replica, so 1.
+- `--tensor-parallel-size <n>` - split over n GPUs; the stack reference's *Traps* say when a stack caps it.
 - `--quantization <method>` - usually inferred from the checkpoint (compressed-tensors w4a16 needs compute capability >= 7.5).
 - Reference: https://docs.vllm.ai/en/latest/cli/serve.html
 
@@ -58,7 +58,7 @@ curl -s <base url>/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"<served name>","messages":[{"role":"user","content":"Say hello in one sentence."}],"max_tokens":64}'
 ```
 
-`<auth header>` applies on `azure` only: the stack reference's *API key* gives it.
+`<auth header>` applies when the stack reference has an *API key* section, which gives it.
 
 - Reference: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
 
