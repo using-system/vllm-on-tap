@@ -1,0 +1,22 @@
+name: qwen38-27b-agentic
+description: Qwen3.8 27B (BF16) for agentic coding on one A100 80 GB - text only, tool calling, reasoning parser, MTP speculative decoding, prefix caching; MLX 4-bit without MTP on local-vllm-metal; not yet verified live
+model: Qwen/Qwen3.8-27B
+served_model_name: qwen3.8-27b
+gpu_memory_gb: 80
+vllm_args:
+  --language-model-only: true
+  --max-model-len: 131072
+  --gpu-memory-utilization: 0.92
+  --max-num-seqs: 8
+  --enable-prefix-caching: true
+  --reasoning-parser: qwen3
+  --enable-auto-tool-choice: true
+  --tool-call-parser: qwen3_xml
+  --speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+env: []
+stacks:
+  local-vllm-metal:
+    model: mlx-community/Qwen3.8-27B-4bit
+    gpu_memory_gb: 48
+    vllm_args:
+      --speculative-config: false
