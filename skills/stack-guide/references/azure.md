@@ -230,14 +230,16 @@ prints (`otel-collector.internal.<environment default domain>`), read
 at every *Prepare* with `true`: the apps of the environment reach it, and
 nothing outside the environment does.
 
-`false`: delete whichever exists, the collector first, and say what was
-deleted. When the collector exists, list the served apps first
-(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`).
-When it lists any, each one keeps exporting to the deleted collector, so
-its traces are lost until it is served again: say so and delete only on
-the user's yes. A no keeps `telemetry_enabled: true` and the collector's
-`otlp_endpoint`, and leaves all three resources.
-`az resource` needs no extension:
+`false`: never delete silently - the names are fixed, but a resource
+under one of them may be the user's, not vllm-on-tap's. Check which of
+the three exist (the `show` commands below); none: nothing to do.
+Otherwise list them, with the served apps
+(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`),
+which keep exporting to a deleted collector and lose their traces until
+served again, and ask the user's permission before deleting anything.
+On a yes, delete them, the collector first, and say what was deleted.
+On a no, delete nothing: keep `telemetry_enabled: true` and the
+collector's `otlp_endpoint`. `az resource` needs no extension:
 
 ```bash
 az containerapp show --name otel-collector --resource-group <resource_group>
