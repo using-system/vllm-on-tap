@@ -22,7 +22,7 @@ plugin:
 | Where | What |
 | --- | --- |
 | `plugin.json` | The plugin manifest (Agent Plugins 1.0.0). Its `version` is set by the release workflow. |
-| `skills/` | The product: the `vot-config`, `vot-serve` and `vot-destroy` commands, and the guides they route to (`stack-guide` with one reference per stack, `load-preset`, `vllm-guide`). Markdown a coding agent executes - a wording change is a behavior change. |
+| `skills/` | The product: the `vot-config`, `vot-serve`, `vot-destroy` and `vot-instrument-preset` commands, and the guides they route to (`stack-guide` with one reference per stack, `load-preset`, `vllm-guide`). Markdown a coding agent executes - a wording change is a behavior change. |
 | `presets/` | The builtin presets and their `schema.json`. |
 | `tests/`, `.github/scripts/` | The repository check CI runs, and its tests. |
 | `.vot/environments/` | The repository's own environments (`azure` on the `azure` stack, `mac` on `local-vllm-metal`), so a live run of a change starts from `/vot-serve`. No real identifier: `azure` uses the logged-in `az` subscription. |
