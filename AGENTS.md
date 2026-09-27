@@ -81,10 +81,13 @@ created by `/vot-config` and removed only by the maintainer.
 
 ## The README is user documentation
 
-`README.md` explains what the plugin does and how to use it — never how a
-stack runs inside, and never a list that grows with the content: it names
-no preset and restates no stack command. The commands live in the skills,
-once; the README points at them.
+**Keep the README short and simple.** `README.md` explains what the plugin
+does and how to use it, in as few words as possible: one sentence per stack
+or feature, no internals, no caveats, no measurements, no history. When in
+doubt, cut rather than add - the details belong in the skills. It never
+says how a stack runs inside, and never holds a list that grows with the
+content: it names no preset and restates no stack command. The commands
+live in the skills, once; the README points at them.
 
 ## Builtin presets
 
