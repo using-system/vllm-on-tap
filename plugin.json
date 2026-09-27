@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "vllm-on-tap",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Serve vLLM presets on demand - locally, Kubernetes (KServe), Azure (Container Apps), AWS (ECS) or GCP (Cloud Run) - with their traces over OTLP, and tear them down again.",
   "author": {
     "name": "using-system",
