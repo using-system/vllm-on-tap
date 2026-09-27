@@ -64,3 +64,4 @@ defaults to `name` when absent.
 | `gemma4-12b-qat` | `google/gemma-4-12B-it-qat-w4a16-ct` - NVIDIA stacks only, not `local-vllm-metal` | 16 GB |
 | `gemma4-e4b-qat` | `google/gemma-4-E4B-it-qat-w4a16-ct` (MLX `mlx-community/gemma-4-e4b-it-4bit` on `local-vllm-metal`) | 16 GB |
 | `gemma4-e2b-qat` | `google/gemma-4-E2B-it-qat-w4a16-ct` (MLX `mlx-community/gemma-4-e2b-it-4bit` on `local-vllm-metal`) | 16 GB |
+| `qwen38-27b-agentic` | `Qwen/Qwen3.8-27B` (MLX `mlx-community/Qwen3.8-27B-4bit` on `local-vllm-metal`) - not yet verified live | 80 GB (48 GB on `local-vllm-metal`) |

@@ -51,10 +51,12 @@ Planned, not supported in this version yet:
 ## Presets
 
 A preset names a model and its `vllm serve` flags, not where it runs. The
-builtin presets live in [`presets/`](presets/); `/vot-serve` with no
-argument lists them. Add your own under `.vot/presets/<name>.yaml`,
-validated against [`presets/schema.json`](presets/schema.json); a custom
-preset of the same name shadows the builtin one.
+builtin presets in [`presets/`](presets/) are few and only examples;
+`/vot-serve` with no argument lists them. For your own needs, write a
+custom preset with `/vot-instrument-preset`: it lands in
+`.vot/presets/<name>.yaml`, validated against
+[`presets/schema.json`](presets/schema.json), and shadows a builtin preset
+of the same name.
 
 ## Traces
 

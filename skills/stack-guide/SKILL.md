@@ -35,7 +35,12 @@ https://docs.astral.sh/uv/getting-started/installation/ (on the user's yes).
 
 Placeholders used in the references: `<preset>` (the preset name),
 `<model>`, `<served name>`, `<vllm args>` (the merged `vllm_args` rendered
-as `--flag value`, `true` as `--flag`, `false` omitted), `<port>` and the
+as `--flag value`, `true` as `--flag`, `false` omitted; on a shell command
+line each value is single-quoted, `--flag '<value>'`, and in a JSON array
+each value is a JSON-encoded string, so a JSON value such as
+`{"method":"mtp"}` passes intact; a `'` inside a value is written `'\''`
+in both cases, since the azure JSON array is itself single-quoted in the
+shell), `<port>` and the
 other `config` fields by their key, plus the placeholders a reference
 defines itself (`azure`: `<environment>`, `<storage>`). `[...]` marks a
 part included only when its condition applies, without the brackets.
