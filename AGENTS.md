@@ -97,7 +97,8 @@ flag, a behaviour, a cost - lives only in that stack's reference under
 skills never carry it: they point at a reference section (*Prepare*,
 *API key*, *Traps*...) instead of branching on a stack. A stack type
 appears by name only where the stack-guide skill dispatches on it (its
-earlier names), or in a preset's `stacks` override.
+earlier names), in a preset's `stacks` override, and in the builtin
+table of `skills/load-preset/SKILL.md` that mirrors those overrides.
 
 ## Builtin presets
 
