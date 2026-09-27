@@ -45,7 +45,8 @@ other `config` fields by their key, plus the placeholders a reference
 defines itself (`azure`: `<environment>`, `<storage>`). `[...]` marks a
 part included only when its condition applies, without the brackets.
 
-Tracing (every type): when the environment has `otlp_endpoint`, add
+Tracing (every type): when the environment has `otlp_endpoint`, or the
+reference's *Serve* checks resolved one, add
 `--otlp-traces-endpoint <otlp_endpoint>` to `<vllm args>` and set
 `OTEL_SERVICE_NAME=vot-<preset>` in vLLM's environment. For an OTLP/HTTP
 endpoint (port 4318 or a `/v1/traces` path) also set

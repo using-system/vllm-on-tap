@@ -158,7 +158,9 @@ to `vot-appi`. vLLM exports traces only, so only a traces pipeline runs.
 otherwise offer `az extension add --name application-insights --upgrade`,
 run on the user's yes (on a no, go on as `false`, which needs no
 extension). Then create whichever is missing, in this order; an existing one
-is reused as it is. Say what it costs first: Log Analytics bills the GB
+is reused as it is - except the collector when `vot-appi` was created in
+this run: its secret holds the old connection string, so delete it and
+create it again. Say what it costs first: Log Analytics bills the GB
 ingested (the traces of a few serves stay within cents), and the collector
 runs on the Consumption profile with 0.25 vCPU and 0.5 Gi, always on, a
 few USD a month while idle.
@@ -239,10 +241,13 @@ rule included); none: nothing to do. Otherwise list them, with the served
 apps (`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`),
 which keep exporting to a deleted collector and lose their traces until
 served again, and ask the user's permission for each one before deleting
-it - the user may keep a workspace and drop the collector. Delete the
-ones allowed, the collector first, and say what was deleted and what was
-kept. A kept collector keeps `telemetry_enabled: true`; otherwise it is
-written `false`. `az resource` needs no extension:
+it, following the dependencies - the collector needs `vot-appi`, which
+needs `vot-logs`: deleting `vot-logs` deletes `vot-appi` and the
+collector too, and deleting `vot-appi` deletes the collector, so keeping
+the collector keeps all three (the user may still drop the collector
+alone and keep the workspace). Delete the ones allowed, the collector
+first, and say what was deleted and what was kept. A kept collector
+keeps `telemetry_enabled: true`; otherwise it is written `false`. `az resource` needs no extension:
 
 ```bash
 az containerapp show --name otel-collector --resource-group <resource_group>
