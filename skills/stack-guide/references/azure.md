@@ -22,9 +22,9 @@ vLLM's traces through an OpenTelemetry Collector in the environment.
 - `resource_group` - default `rg-vot`; dedicated to vllm-on-tap.
 - `image` - optional; default `vllm/vllm-openai:v0.30.0`.
 - `telemetry_enabled` - `true` or `false`, default `false`. `true`: *Prepare*
-  makes sure the telemetry resources exist (see *Telemetry*), and the
-  environment's `otlp_endpoint` is the collector's. `false`: *Prepare*
-  deletes them when present.
+  makes sure the telemetry resources exist (see *Telemetry*), and *Serve*
+  exports the traces to the collector. `false`: *Prepare* offers to delete
+  them when present.
 
 `environment`, `storage` and `api_key_env` fields from an earlier version
 are ignored, and dropped on the next write.
@@ -223,23 +223,26 @@ az containerapp create --name otel-collector --resource-group <resource_group> -
 ```
 
 All the lines above run in one shell command, so the connection string
-dies with it. The environment's `otlp_endpoint` is then
-`http://<collector fqdn>/v1/traces`, where `<collector fqdn>` is what
+dies with it. The traces go to `http://<collector fqdn>/v1/traces`,
+where `<collector fqdn>` is what
 `az containerapp show --name otel-collector --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv`
-prints (`otel-collector.internal.<environment default domain>`), read
-at every *Prepare* with `true`: the apps of the environment reach it, and
-nothing outside the environment does.
+prints (`otel-collector.internal.<environment default domain>`): the apps
+of the environment reach it, and nothing outside the environment does.
+*Serve* resolves it at every serve; the environment stores no
+`otlp_endpoint`, so no live domain lands in a committed file and a
+recreated environment never leaves a stale endpoint.
 
 `false`: never delete silently - the names are fixed, but a resource
 under one of them may be the user's, not vllm-on-tap's. Check which of
-the three exist (the `show` commands below); none: nothing to do.
-Otherwise list them, with the served apps
-(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`),
+the four exist (the `show` and `list` commands below, the smart-detection
+rule included); none: nothing to do. Otherwise list them, with the served
+apps (`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`),
 which keep exporting to a deleted collector and lose their traces until
-served again, and ask the user's permission before deleting anything.
-On a yes, delete them, the collector first, and say what was deleted.
-On a no, delete nothing: keep `telemetry_enabled: true` and the
-collector's `otlp_endpoint`. `az resource` needs no extension:
+served again, and ask the user's permission for each one before deleting
+it - the user may keep a workspace and drop the collector. Delete the
+ones allowed, the collector first, and say what was deleted and what was
+kept. A kept collector keeps `telemetry_enabled: true`; otherwise it is
+written `false`. `az resource` needs no extension:
 
 ```bash
 az containerapp show --name otel-collector --resource-group <resource_group>
@@ -267,7 +270,7 @@ Checks, in this order, stopping at the first refusal (`<environment>` and
 2. Profile: always `gpu-a100` (cpu `24`, memory `220Gi`, one A100 80 GB); a preset with `gpu_memory_gb` > 80 -> refuse (no serverless profile fits).
 3. The profile exists: `az containerapp env workload-profile list --name <environment> --resource-group <resource_group> --query "[].name" -o tsv` lists it; otherwise refuse and route to `/vot-config` (quota).
 4. `<storage>` resolved: `az containerapp env storage show --name <environment> --resource-group <resource_group> --storage-name vot-cache` fails -> refuse and route to `/vot-config`.
-5. `telemetry_enabled` is `true` and `az containerapp show --name otel-collector --resource-group <resource_group>` fails -> refuse and route to `/vot-config`.
+5. `telemetry_enabled` is `true`: `<collector fqdn>` (see *Telemetry*) prints nothing -> refuse and route to `/vot-config`; otherwise `http://<collector fqdn>/v1/traces` is the `otlp_endpoint` of stack-guide's tracing rule for this serve.
 6. Internal environment (see *Prepare*): `<internal>` is `true`, otherwise `false`.
 7. Already served: `az containerapp show --name vot-<preset> --resource-group <resource_group>` succeeds -> unit exists.
 
