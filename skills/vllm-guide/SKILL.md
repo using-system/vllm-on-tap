@@ -38,10 +38,10 @@ Documentation root: https://docs.vllm.ai/en/latest/
   with two request headers. `traceparent` (W3C) makes the `llm_request`
   span a child of the client's current span, so a conversation the client
   traces as one trace reads as one trace (`baggage` is ignored).
-  `X-Request-Id` (or the body's `request_id`) becomes the span's `gen_ai.request.id` - `chatcmpl-<value>`
-  on chat completions - so a client without tracing can carry a
-  conversation identifier in it, e.g. `<conversation id>-<turn>`; keep it
-  unique per request.
+  `X-Request-Id` (or the body's `request_id`) becomes the span's
+  `gen_ai.request.id` - `chatcmpl-<value>` on chat completions - so a
+  client without tracing can carry a conversation identifier in it, e.g.
+  `<conversation id>-<turn>`; keep it unique per request.
 - Metrics have no OTLP export (Prometheus `/metrics` only); vllm-on-tap exports traces only.
 - The OpenTelemetry packages are part of vLLM's base requirements; an install
   that reports them missing is repaired with `pip install 'vllm[otel]'`.

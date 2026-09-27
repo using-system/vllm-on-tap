@@ -52,7 +52,8 @@ reference's *Serve* checks resolved one, add
 `OTEL_RESOURCE_ATTRIBUTES=<resource attributes>` in vLLM's environment,
 where `<resource attributes>` is
 `vot.preset=<preset>,vot.model=<model>,vot.stack=<stack type>`, each
-value percent-encoded (`<model>` after the preset's per-stack override).
+value percent-encoded outside `A-Za-z0-9._~/-` (`<model>` after the
+preset's per-stack override).
 For an OTLP/HTTP
 endpoint (port 4318 or a `/v1/traces` path) also set
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and pass the full URL
