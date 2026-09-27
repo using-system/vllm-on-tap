@@ -14,7 +14,6 @@ vLLM's traces through an OpenTelemetry Collector in the environment.
 - `az provider show --namespace Microsoft.App --query registrationState -o tsv` prints `Registered`. Install: `az provider register --namespace Microsoft.App --wait`.
 - `jq --version` succeeds (to build the app spec below). Install: `brew install jq` / the distribution's package.
 - `openssl version` succeeds (to generate the API key). Install: `brew install openssl` / the distribution's package.
-- When `telemetry_enabled` is `true`: `az extension show --name application-insights` succeeds. Install: `az extension add --name application-insights --upgrade`.
 
 ## Config fields
 
@@ -94,7 +93,7 @@ az containerapp env workload-profile add --name <environment> --resource-group <
 A profile `add` refused for quota: tell the user to request "Managed
 Environment Consumption NCA100 GPUs" on the environment's Quota page
 (https://learn.microsoft.com/azure/container-apps/quota-requests), and save
-the environment anyway.
+the environment anyway, then continue with the storage and *Telemetry*.
 
 Then the optional storage - not required, an environment serves
 without it. `<storage>` resolved: reuse it, and make sure its share and
@@ -148,6 +147,8 @@ is lost and the storage would register without a key.
 
 ### Telemetry
 
+Not yet verified live.
+
 Driven by `telemetry_enabled` alone, every run of *Prepare*, with fixed
 names in `<resource_group>`: a Log Analytics workspace `vot-logs`, a
 workspace-based Application Insights `vot-appi` on it, and a Container App
@@ -155,8 +156,11 @@ workspace-based Application Insights `vot-appi` on it, and a Container App
 receives OTLP/HTTP from the apps of the environment and exports the traces
 to `vot-appi`. vLLM exports traces only, so only a traces pipeline runs.
 
-`true`: create whichever is missing, in this order; an existing one is
-reused as it is. Say what it costs first: Log Analytics bills the GB
+`true`: first `az extension show --name application-insights` succeeds -
+otherwise offer `az extension add --name application-insights --upgrade`,
+run on the user's yes (on a no, write `telemetry_enabled: false` and
+stop). Then create whichever is missing, in this order; an existing one
+is reused as it is. Say what it costs first: Log Analytics bills the GB
 ingested (the traces of a few serves stay within cents), and the collector
 runs on the Consumption profile with 0.25 vCPU and 0.5 Gi, always on, a
 few USD a month while idle.
@@ -226,7 +230,11 @@ dies with it. The environment's `otlp_endpoint` is then
 collector by its name, and nothing outside the environment does.
 
 `false`: delete whichever exists, the collector first, and say what was
-deleted. `az resource` needs no extension:
+deleted. When the collector exists, list the served apps first
+(`az containerapp list --resource-group <resource_group> --query "[?starts_with(name,'vot-')].name" -o tsv`):
+each one keeps exporting to the deleted collector, so its traces are lost
+until it is served again - say so and delete only on the user's yes.
+`az resource` needs no extension:
 
 ```bash
 az containerapp show --name otel-collector --resource-group <resource_group>
@@ -237,7 +245,13 @@ az resource delete --name vot-appi --resource-group <resource_group> --resource-
 
 az monitor log-analytics workspace show --workspace-name vot-logs --resource-group <resource_group>
 az monitor log-analytics workspace delete --workspace-name vot-logs --resource-group <resource_group> --yes
+
+az resource list --resource-group <resource_group> --resource-type microsoft.alertsmanagement/smartDetectorAlertRules --query "[?name=='Failure Anomalies - vot-appi'].id" -o tsv
+az resource delete --ids <id>
 ```
+
+The last pair removes the smart-detection rule Azure may add with
+`vot-appi`, when it exists.
 
 ## Serve
 
@@ -353,13 +367,14 @@ Fails: report that the unit does not exist, stop. Succeeds:
 az containerapp delete --name vot-<preset> --resource-group <resource_group> --yes
 ```
 
-The environment, its GPU profiles, the storage account (the caches with
-it) and the telemetry resources stay; `az group delete --name <resource_group>` removes
-everything and is the user's call, never a destroy's.
+The environment, its GPU profiles, the storage account (the caches
+with it) and the telemetry resources stay; `az group delete --name
+<resource_group>` removes everything and is the user's call, never a
+destroy's.
 
 ## Traps
 
-- The create spec must carry `ingress.allowInsecure: false`: without it `az containerapp create --yaml` fails with `400 ... could not be converted to System.Boolean. Path: $` (verified with containerapp 1.2.0b5 to 1.3.0b5).
+- A create spec must carry `ingress.allowInsecure` explicitly - `false` for `vot-<preset>`, `true` for `otel-collector` (see below): without it `az containerapp create --yaml` fails with `400 ... could not be converted to System.Boolean. Path: $` (verified with containerapp 1.2.0b5 to 1.3.0b5).
 - `--logs-destination none` keeps the environment from creating a billed Log Analytics workspace; `az containerapp logs show` streams console and system logs without it.
 - GPU workload profiles get no default health probes, so a long model load is not restarted.
 - One GPU per replica; `--tensor-parallel-size` stays 1.
@@ -375,7 +390,7 @@ everything and is the user's call, never a destroy's.
 - An internal environment has no IP rule on the app (its callers come from private addresses): the ingress is reachable from the whole VNet, the API key still guards `/v1` - the routes it leaves open are reachable from the VNet too.
 - An internal environment's FQDN resolves only through a private DNS zone for the environment's default domain, pointing to its static IP, which the user creates on their VNet; without it even a caller inside the VNet gets no answer.
 - A storage account with network rules or private endpoints only must let the environment's subnet reach it, or the `vot-cache` mount fails at start and the revision never runs.
-- An environment on a VNet needs outbound access to the image registry (Docker Hub) and to `huggingface.co`; a route table or firewall that blocks it stops the pull or the weights download.
+- An environment on a VNet needs outbound access to the image registry (Docker Hub), to `huggingface.co` and, with `telemetry_enabled`, to the Application Insights ingestion endpoint (`*.in.applicationinsights.azure.com`); a route table or firewall that blocks it stops the pull or the weights download.
 - A storage account name is global: the generated name is checked with `check-name` before a create, and generated again when taken.
 - Another StorageV2 account with large file shares, or a second Container Apps environment, in `<resource_group>` makes *Prepare* and *Serve* refuse (*Destroy* still runs): move it out, or use a resource group dedicated to vllm-on-tap.
 - `mountOptions` on the `vot-cache` volume accepts `mfsymlinks,nobrl`; `actimeo` is refused (`ContainerAppVolumeMountOptionsNotSupported`).
@@ -383,3 +398,4 @@ everything and is the user's call, never a destroy's.
 - The collector exporter's type is `azure_monitor`; `azuremonitor` is its deprecated name. It reads the connection string from `APPLICATIONINSIGHTS_CONNECTION_STRING`, so the configuration holds no secret.
 - A Log Analytics workspace delete is a soft delete for 14 days: creating `vot-logs` again in the same resource group within that time recovers it, data included.
 - An existing collector is reused as it is, never updated: to move it to another image, delete `otel-collector` alone (`az containerapp delete`) and run `/vot-config` again; the workspace and its data stay.
+- Creating `vot-appi` may also create the shared action group `Application Insights Smart Detection`; the `false` path leaves it (other components can use it), and it costs nothing.
