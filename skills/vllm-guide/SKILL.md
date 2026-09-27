@@ -32,13 +32,13 @@ Documentation root: https://docs.vllm.ai/en/latest/
   takes `host:port` or `http(s)://host:port` with no path.
 - `OTEL_SERVICE_NAME=vot-<preset>` names the service the spans belong to.
 - `OTEL_RESOURCE_ATTRIBUTES=key=value,...` adds resource attributes to
-  every span, the engine's and the workers' alike (a `,`, `=` or space
-  inside a value is percent-encoded).
+  every span, the engine's and the workers' alike (percent-encode a `,`,
+  `=`, `%` or space inside a value).
 - Conversation: vLLM keeps none, but a client ties its requests to one
   with two request headers. `traceparent` (W3C) makes the `llm_request`
-  span a child of the client's own trace, so a whole conversation reads as
-  one trace (`baggage` is ignored). `X-Request-Id` (or the body's
-  `request_id`) becomes the span's `gen_ai.request.id` - `chatcmpl-<value>`
+  span a child of the client's current span, so a conversation the client
+  traces as one trace reads as one trace (`baggage` is ignored).
+  `X-Request-Id` (or the body's `request_id`) becomes the span's `gen_ai.request.id` - `chatcmpl-<value>`
   on chat completions - so a client without tracing can carry a
   conversation identifier in it, e.g. `<conversation id>-<turn>`; keep it
   unique per request.

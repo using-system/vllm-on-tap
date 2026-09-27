@@ -51,8 +51,9 @@ reference's *Serve* checks resolved one, add
 `OTEL_SERVICE_NAME=vot-<preset>` and
 `OTEL_RESOURCE_ATTRIBUTES=<resource attributes>` in vLLM's environment,
 where `<resource attributes>` is
-`service.namespace=vllm-on-tap,vot.preset=<preset>,vot.model=<model>,vot.stack=<stack type>`
-(`<model>` as the stack serves it). For an OTLP/HTTP
+`vot.preset=<preset>,vot.model=<model>,vot.stack=<stack type>`, each
+value percent-encoded (`<model>` after the preset's per-stack override).
+For an OTLP/HTTP
 endpoint (port 4318 or a `/v1/traces` path) also set
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and pass the full URL
 ending in `/v1/traces`, appending that path when the environment's value
