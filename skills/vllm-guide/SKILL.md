@@ -31,6 +31,17 @@ Documentation root: https://docs.vllm.ai/en/latest/
   (`http://host:4318` alone posts to `/` and the traces are lost). gRPC
   takes `host:port` or `http(s)://host:port` with no path.
 - `OTEL_SERVICE_NAME=vot-<preset>` names the service the spans belong to.
+- `OTEL_RESOURCE_ATTRIBUTES=key=value,...` adds resource attributes to
+  every span, the engine's and the workers' alike (a `,`, `=` or space
+  inside a value is percent-encoded).
+- Conversation: vLLM keeps none, but a client ties its requests to one
+  with two request headers. `traceparent` (W3C) makes the `llm_request`
+  span a child of the client's own trace, so a whole conversation reads as
+  one trace (`baggage` is ignored). `X-Request-Id` (or the body's
+  `request_id`) becomes the span's `gen_ai.request.id` - `chatcmpl-<value>`
+  on chat completions - so a client without tracing can carry a
+  conversation identifier in it, e.g. `<conversation id>-<turn>`; keep it
+  unique per request.
 - Metrics have no OTLP export (Prometheus `/metrics` only); vllm-on-tap exports traces only.
 - The OpenTelemetry packages are part of vLLM's base requirements; an install
   that reports them missing is repaired with `pip install 'vllm[otel]'`.

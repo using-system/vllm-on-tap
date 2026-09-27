@@ -29,7 +29,7 @@ Start (the image's entrypoint is `vllm serve`, so the arguments start with the m
 docker run -d --name vot-<preset> --gpus all --ipc=host \
   -p 127.0.0.1:<port>:8000 \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
-  [-e HF_TOKEN] [-e OTEL_SERVICE_NAME=vot-<preset>] [-e OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf] \
+  [-e HF_TOKEN] [-e OTEL_SERVICE_NAME=vot-<preset> -e OTEL_RESOURCE_ATTRIBUTES='<resource attributes>'] [-e OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf] \
   <image> <model> --served-model-name <served name> <vllm args>
 ```
 

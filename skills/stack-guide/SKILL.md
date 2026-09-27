@@ -48,7 +48,11 @@ part included only when its condition applies, without the brackets.
 Tracing (every type): when the environment has `otlp_endpoint`, or the
 reference's *Serve* checks resolved one, add
 `--otlp-traces-endpoint <otlp_endpoint>` to `<vllm args>` and set
-`OTEL_SERVICE_NAME=vot-<preset>` in vLLM's environment. For an OTLP/HTTP
+`OTEL_SERVICE_NAME=vot-<preset>` and
+`OTEL_RESOURCE_ATTRIBUTES=<resource attributes>` in vLLM's environment,
+where `<resource attributes>` is
+`service.namespace=vllm-on-tap,vot.preset=<preset>,vot.model=<model>,vot.stack=<stack type>`
+(`<model>` as the stack serves it). For an OTLP/HTTP
 endpoint (port 4318 or a `/v1/traces` path) also set
 `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf` and pass the full URL
 ending in `/v1/traces`, appending that path when the environment's value

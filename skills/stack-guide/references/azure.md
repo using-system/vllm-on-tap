@@ -295,7 +295,7 @@ ENV_ID="$(az containerapp env show --name <environment> --resource-group <resour
 CALLER_IP="$(curl -fsS https://api.ipify.org)"; [ -n "$CALLER_IP" ] || exit 1   # only when not internal
 VOT_API_KEY="$(openssl rand -hex 32)"; [ -n "$VOT_API_KEY" ] || exit 1; export VOT_API_KEY
 ARGS='["<model>","--served-model-name","<served name>","--port","8000", <vllm args as JSON strings>]'
-ENVS='[{"name":"VLLM_API_KEY","secretRef":"vllm-api-key"}]'   # + {"name":"HF_TOKEN","secretRef":"hf-token"}, {"name":"OTEL_SERVICE_NAME","value":"vot-<preset>"}, {"name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","value":"http/protobuf"} when they apply
+ENVS='[{"name":"VLLM_API_KEY","secretRef":"vllm-api-key"}]'   # + {"name":"HF_TOKEN","secretRef":"hf-token"}, {"name":"OTEL_SERVICE_NAME","value":"vot-<preset>"}, {"name":"OTEL_RESOURCE_ATTRIBUTES","value":"<resource attributes>"}, {"name":"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL","value":"http/protobuf"} when they apply
 az containerapp create --name vot-<preset> --resource-group <resource_group> --yaml <(jq -n \
   --arg loc "<location>" --arg env "$ENV_ID" --arg wp "<profile>" --arg img "<image>" \
   --arg ip "${CALLER_IP:-}/32" --argjson internal <internal> --argjson cpu <cpu> --arg mem "<memory>" \
