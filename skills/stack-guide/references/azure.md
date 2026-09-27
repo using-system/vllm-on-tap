@@ -147,8 +147,6 @@ is lost and the storage would register without a key.
 
 ### Telemetry
 
-Not yet verified live.
-
 Driven by `telemetry_enabled` alone, every run of *Prepare*, with fixed
 names in `<resource_group>`: a Log Analytics workspace `vot-logs`, a
 workspace-based Application Insights `vot-appi` on it, and a Container App
@@ -226,8 +224,11 @@ az containerapp create --name otel-collector --resource-group <resource_group> -
 
 All the lines above run in one shell command, so the connection string
 dies with it. The environment's `otlp_endpoint` is then
-`http://otel-collector/v1/traces`: the apps of the environment reach the
-collector by its name, and nothing outside the environment does.
+`http://<collector fqdn>/v1/traces`, where `<collector fqdn>` is what
+`az containerapp show --name otel-collector --resource-group <resource_group> --query properties.configuration.ingress.fqdn -o tsv`
+prints (`otel-collector.internal.<environment default domain>`), read
+at every *Prepare* with `true`: the apps of the environment reach it, and
+nothing outside the environment does.
 
 `false`: delete whichever exists, the collector first, and say what was
 deleted. When the collector exists, list the served apps first
@@ -252,8 +253,8 @@ az resource list --resource-group <resource_group> --resource-type microsoft.ale
 az resource delete --ids "<id>"   # the id holds spaces: keep the quotes
 ```
 
-The last pair removes the smart-detection rule Azure may add with
-`vot-appi`, when it exists.
+The last pair removes the smart-detection rule Azure adds with
+`vot-appi`, a few minutes after its create.
 
 ## Serve
 
@@ -396,8 +397,8 @@ destroy's.
 - A storage account name is global: the generated name is checked with `check-name` before a create, and generated again when taken.
 - Another StorageV2 account with large file shares, or a second Container Apps environment, in `<resource_group>` makes *Prepare* and *Serve* refuse (*Destroy* still runs): move it out, or use a resource group dedicated to vllm-on-tap.
 - `mountOptions` on the `vot-cache` volume accepts `mfsymlinks,nobrl`; `actimeo` is refused (`ContainerAppVolumeMountOptionsNotSupported`).
-- The collector's ingress is internal with `allowInsecure: true`, so the apps post plain HTTP to `http://otel-collector`; with `allowInsecure: false` the ingress redirects the POST to HTTPS and the spans are lost.
+- The collector's ingress is internal with `allowInsecure: true`, so the apps post plain HTTP to `http://<collector fqdn>`; with `allowInsecure: false` the ingress redirects the POST to HTTPS and the spans are lost.
 - The collector exporter's type is `azure_monitor`; `azuremonitor` is its deprecated name. It reads the connection string from `APPLICATIONINSIGHTS_CONNECTION_STRING`, so the configuration holds no secret.
 - A Log Analytics workspace delete is a soft delete for 14 days: creating `vot-logs` again in the same resource group within that time recovers it, data included.
 - An existing collector is reused as it is, never updated: to move it to another image, delete `otel-collector` alone (`az containerapp delete`) and run `/vot-config` again; the workspace and its data stay.
-- Creating `vot-appi` may also create the shared action group `Application Insights Smart Detection`; the `false` path leaves it (other components can use it), and it costs nothing.
+- The bare app name `otel-collector` does not resolve from another app (`NameResolutionError`, the spans are lost): the endpoint is the internal FQDN.
