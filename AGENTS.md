@@ -89,6 +89,16 @@ says how a stack runs inside, and never holds a list that grows with the
 content: it names no preset and restates no stack command. The commands
 live in the skills, once; the README points at them.
 
+## Stack specifics live in the stack reference
+
+Anything specific to one stack - a cloud service or resource, a step, a
+flag, a behaviour, a cost - lives only in that stack's reference under
+`skills/stack-guide/references/`. Skill descriptions and the generic
+skills never carry it: they point at a reference section (*Prepare*,
+*API key*, *Traps*...) instead of branching on a stack. A stack type
+appears by name only where the stack-guide skill dispatches on it (its
+earlier names), or in a preset's `stacks` override.
+
 ## Builtin presets
 
 A preset is data: the model, its `vllm serve` flags, and per-stack

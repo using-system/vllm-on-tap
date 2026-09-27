@@ -62,8 +62,7 @@ of the same name.
 
 vLLM exports traces (not metrics) over OTLP. Set `otlp_endpoint` on an
 environment and every preset served on it exports its request traces
-there. On azure, `telemetry_enabled` sends them to Application Insights
-instead.
+there.
 
 ## License
 
