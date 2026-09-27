@@ -1,6 +1,6 @@
 ---
 name: vot-config
-description: Create, update or select a vllm-on-tap environment - its stack type (local-vllm, local-vllm-metal, local-vllm-docker, azure), its config and its optional OTLP traces endpoint - checking and offering to install the tools it needs, and on azure preparing the resource group, the Container Apps environment, its GPU profiles, an optional cache storage account and optional telemetry (Application Insights fed by an OpenTelemetry Collector). Use when the user wants to configure where presets are served.
+description: Create, update or select a vllm-on-tap environment - its stack type (local-vllm, local-vllm-metal, local-vllm-docker, azure), its config and its optional OTLP traces endpoint - checking and offering to install the tools it needs, and on azure preparing the resource group, the Container Apps environment, its GPU profiles and an optional cache storage account. Use when the user wants to configure where presets are served.
 ---
 
 # /vot-config
@@ -28,11 +28,10 @@ State lives in the user's repository under `.vot/`:
    user's (a driver, `az login`) is stated, never done.
 5. **Config.** Ask the reference's *Config fields*, showing the defaults.
 6. **Prepare.** When the reference has a *Prepare* section, run it.
-7. **Traces.** On `azure` with `telemetry_enabled: true`, the traces go to
-   the collector, resolved at serve (the reference's *Telemetry*):
-   `otlp_endpoint` is neither asked nor written, and dropped when present.
-   Otherwise ask `otlp_endpoint` (optional, empty to skip); on `azure`,
-   warn when it names `localhost` or a private address.
+7. **Traces.** When the reference's *Config fields* say the config gives
+   the traces endpoint, `otlp_endpoint` is neither asked nor written, and
+   dropped when present. Otherwise ask `otlp_endpoint` (optional, empty to
+   skip); on `azure`, warn when it names `localhost` or a private address.
 8. **Write.** On create or update, write `.vot/environments/<name>.yaml`:
 
    ```yaml

@@ -23,8 +23,10 @@ vLLM's traces through an OpenTelemetry Collector in the environment.
 - `image` - optional; default `vllm/vllm-openai:v0.30.0`.
 - `telemetry_enabled` - `true` or `false`, default `false`. `true`: *Prepare*
   makes sure the telemetry resources exist (see *Telemetry*), and *Serve*
-  exports the traces to the collector. `false`: *Prepare* offers to delete
-  them when present.
+  exports the traces to the collector: the config gives the traces
+  endpoint, so `/vot-config` neither asks nor writes `otlp_endpoint`, and
+  drops one present. `false`: *Prepare* offers to delete them when
+  present.
 
 `environment`, `storage` and `api_key_env` fields from an earlier version
 are ignored, and dropped on the next write.
