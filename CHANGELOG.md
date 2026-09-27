@@ -1,3 +1,8 @@
+## [0.2.3] - 2026-09-27
+
+### 🚀 Features
+
+- *(stack-guide)* Add resource attributes to vllm traces and document conversation correlation (#44)
 ## [0.2.2] - 2026-09-27
 
 ### 🚀 Features
