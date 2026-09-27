@@ -1,3 +1,14 @@
+## [0.2.2] - 2026-09-27
+
+### 🚀 Features
+
+- *(presets)* Add /vot-instrument-preset to create or edit a custom preset (#34)
+- *(presets)* Add a qwen3.8 27b builtin preset for agentic coding (#38)
+- *(azure)* Add optional application insights telemetry through an otel collector (#40)
+
+### 📚 Documentation
+
+- Describe the azure stack in one sentence and keep the readme simple (#32)
 ## [0.2.1] - 2026-09-26
 
 ### 🚀 Features
