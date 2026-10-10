@@ -104,7 +104,7 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' plugin.json > plugin.json.tmp
           mv plugin.json.tmp plugin.json
       - name: Hand the bumped tree to the release job
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bumped-tree
           include-hidden-files: true
